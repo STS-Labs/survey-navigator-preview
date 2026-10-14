@@ -86,6 +86,12 @@ select {
 .toast button { font-size: 14px; }
 .loading { position: fixed; z-index: 40; top: 50%; left: calc(50% + 190px); transform: translate(-50%, -50%); }
 
+.basemap {
+  position: fixed; z-index: 10; right: 12px; bottom: 100px; min-height: 36px; padding: 7px 14px; border-radius: 10px;
+  color: var(--t1); font: 600 13px/1.2 var(--font);
+}
+.basemap.on { background: var(--violet-strong); border-color: transparent; box-shadow: var(--glow); color: #fff; }
+
 .maplibregl-ctrl-bottom-right { right: 12px; bottom: 12px; }
 .maplibregl-ctrl-group { background: var(--glass); border: 1px solid var(--hair); }
 .maplibregl-ctrl-group button + button { border-top-color: var(--hair); }

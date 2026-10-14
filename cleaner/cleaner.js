@@ -21,6 +21,7 @@ const sign = (m) => (m > 0 ? '+' : m < 0 ? '−' : '') + m0(Math.abs(m));
 let map, mapReady = false, doc = null, netDoc = null, files = [];
 const S = {
   mode: 'select', sel: null, hover: null, markers: true, last: null,
+  basemap: (() => { try { return localStorage.getItem('cleaner.basemap') || 'night'; } catch { return 'night'; } })(),
   pick: { a: null, b: null, cands: [], ci: 0 }, preview: null,
   pts: { sel: new Set(), anchor: null, drag: null },
   filters: { deadEnd: true, spur: true, midStreet: true },
@@ -81,7 +82,7 @@ function startMap() {
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
   map.on('style.load', nightTheme);
-  map.on('load', () => { calmMap(); addLayers(); mapReady = true; if (doc) { renderMap(); fitRoute(); } });
+  map.on('load', () => { calmMap(); addLayers(); rememberBaseVisibility(); applyBasemap(); mapReady = true; if (doc) { renderMap(); fitRoute(); } });
   map.on('click', onClick);
   map.on('mousemove', onMove);
   map.on('mousedown', onDown);
@@ -132,6 +133,45 @@ function calmMap() {
   }
 }
 
+/* ------------------------------------------------------------------ satellite basemap */
+
+// Esri World Imagery under the street names and one-way arrows of the vector map: the imagery
+// shows what a spur really is (a street, a yard, a car park); the names keep it readable.
+const SAT_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const SAT_ATTRIBUTION = 'Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community';
+let baseVis = null;                                   // what the night map shows, to restore it exactly
+
+function addSatellite() {
+  map.addSource('sat', { type: 'raster', tiles: [SAT_URL], tileSize: 256, maxzoom: 19, attribution: SAT_ATTRIBUTION });
+  const above = map.getStyle().layers.find((l) => l.type !== 'background');
+  map.addLayer({ id: 'sat', type: 'raster', source: 'sat', layout: { visibility: 'none' }, paint: { 'raster-fade-duration': 0 } }, above && above.id);
+}
+
+function rememberBaseVisibility() {
+  baseVis = new Map();
+  for (const l of map.getStyle().layers) baseVis.set(l.id, map.getLayoutProperty(l.id, 'visibility') || 'visible');
+}
+
+function applyBasemap() {
+  const sat = S.basemap === 'satellite';
+  for (const l of map.getStyle().layers) {
+    if (l.id === 'sat') { map.setLayoutProperty('sat', 'visibility', sat ? 'visible' : 'none'); continue; }
+    const base = baseVis ? baseVis.get(l.id) : null;
+    if (base == null) continue;                                             // our own route layers
+    // the imagery replaces the vector ground and roads; names and one-way arrows stay on top
+    const covered = l.type === 'fill' || l.type === 'fill-extrusion' || (l.type === 'line' && l['source-layer'] === 'transportation');
+    map.setLayoutProperty(l.id, 'visibility', sat && covered ? 'none' : base);
+  }
+  $('btnBasemap').textContent = sat ? 'Map' : 'Satellite';
+  $('btnBasemap').classList.toggle('on', sat);
+  try { localStorage.setItem('cleaner.basemap', S.basemap); } catch { /* private mode */ }
+}
+
+function toggleBasemap() {
+  S.basemap = S.basemap === 'satellite' ? 'night' : 'satellite';
+  if (mapReady) applyBasemap();
+}
+
 function makeIcon(draw, size) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
@@ -146,6 +186,7 @@ function addLayers() {
     g.lineWidth = 5; g.lineCap = 'round'; g.lineJoin = 'round'; g.strokeStyle = '#ffffff';
     g.beginPath(); g.moveTo(s * 0.32, s * 0.24); g.lineTo(s * 0.62, s * 0.5); g.lineTo(s * 0.32, s * 0.76); g.stroke();
   }, 32), { pixelRatio: 2 });
+  addSatellite();
   for (const id of ['route', 'spur', 'lost', 'preview', 'verts', 'uturns', 'picks', 'drag']) map.addSource(id, { type: 'geojson', data: EMPTY });
   const layers = map.getStyle().layers;
   const firstLabel = (layers.find((l) => l.type === 'symbol' && l['source-layer'] === 'transportation_name')
@@ -460,6 +501,7 @@ function bindPanel() {
   $('btnSave').addEventListener('click', save);
   $('btnDownload').addEventListener('click', () => download(E.cleanName(doc.file)));
   $('btnRevert').addEventListener('click', revert);
+  $('btnBasemap').addEventListener('click', toggleBasemap);
   $('toastBtn').addEventListener('click', () => { if (toastAction) toastAction(); hideToast(); });
   $('list').addEventListener('click', (e) => { const li = e.target.closest('li[data-k]'); if (li) select(+li.dataset.k); });
   $('selCard').addEventListener('click', onCardClick);
@@ -511,6 +553,7 @@ function onKey(e) {
     case 'r': case 'R': if (u) rerouteAround(u); break;
     case 'f': case 'F': fitRoute(); break;
     case 'u': case 'U': S.markers = !S.markers; renderMap(); break;
+    case 's': case 'S': toggleBasemap(); break;
     case 'ArrowLeft': if (S.mode === 'reroute') { e.preventDefault(); cycleB(-1); } break;
     case 'ArrowRight': if (S.mode === 'reroute') { e.preventDefault(); cycleB(1); } break;
     case 'Enter': if (S.preview) { e.preventDefault(); applyPreview(); } break;

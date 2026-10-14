@@ -117,7 +117,8 @@ Four modes: **Select** (inspect; `n` / `p` step through), **Cut** (click a spur 
 stretch), **Reroute** (click A, then B further along: the stretch between is replaced by a legal path along
 real streets with no U-turn, previewed in green with what it loses in red, `←` `→` choose another pass
 of the same street for B), **Points** (drag a vertex, it snaps to the street; select a range and press
-Delete). The tool warns about lost coverage, wrong-way pieces and banned turns but never blocks an edit;
+Delete). The **Satellite** button (or `s`) puts Esri imagery under the street names, to see whether a spur
+is a street, a yard or a car park. The tool warns about lost coverage, wrong-way pieces and banned turns but never blocks an edit;
 every edit can be undone. **Save** writes `data/routes/<name>_clean.gpx` (the original is never changed):
 a GPX with the planned points regenerated at every instruction and the track, which the app drives like
 any other file. The OsmAnd routing block of the originals is not reproduced.
