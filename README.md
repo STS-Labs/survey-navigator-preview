@@ -96,6 +96,36 @@ node tests/junction_sheet.mjs day.gpx data/tbilisi-net.json out.html all   # one
 instructions, two-minute GPS gaps, and a driver who ignores the way back. The test that matters most is the
 coverage audit: every metre of the route must be either really driven or on the missed list.
 
+## Cleaning a route
+
+The planner's routes send the car into streets only to turn round and come back. The route cleaner shows
+every U-turn of a day on the map and lets you edit the route until it is smoother:
+
+```bash
+node tools/cleaner_server.mjs            # then open http://127.0.0.1:8791/cleaner/
+node tests/edit_test.mjs                 # the cleaner's engine, checked on every file in data/routes
+node tests/server_test.mjs               # the cleaner's server
+```
+
+Pick a day; its U-turns are listed by km and marked on the map: **dead end** (grey: the car had to turn
+round at the end of a cul-de-sac), **spur** (amber: it turned round at a junction after an out-and-back)
+and **mid-street** (red: it turned round on the street, or through a gap in a divided road). For each
+one the tool says what the out-and-back stretch costs and whether cutting it would lose a street that no
+other pass of the day covers (coverage is counted per mapped street piece, either direction).
+
+Four modes: **Select** (inspect; `n` / `p` step through), **Cut** (click a spur to remove the out-and-back
+stretch), **Reroute** (click A, then B further along: the stretch between is replaced by a legal path along
+real streets with no U-turn, previewed in green with what it loses in red, `←` `→` choose another pass
+of the same street for B), **Points** (drag a vertex, it snaps to the street; select a range and press
+Delete). The tool warns about lost coverage, wrong-way pieces and banned turns but never blocks an edit;
+every edit can be undone. **Save** writes `data/routes/<name>_clean.gpx` (the original is never changed):
+a GPX with the planned points regenerated at every instruction and the track, which the app drives like
+any other file. The OsmAnd routing block of the originals is not reproduced.
+
+The editing logic is in `js/edit.js` and has no DOM: the document is the list of vertices as the engine
+snapped them to the streets, and every edit is a new vertex list plus a rebuild (65 ms for a 177 km day).
+Reroutes can only use streets within about 2.7 km of the day's bounding box.
+
 ## Running it locally
 
 Any static server, e.g. `python3 -m http.server 8790`, then http://localhost:8790. The phone needs the

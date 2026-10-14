@@ -241,8 +241,13 @@ const PLAN = { maxCost: 80000, uturn: { street: 5000, deadEnd: 3000 }, avoid: { 
 export function legalPath(doc, iFrom, iTo, opts = {}) {
   const { route, net, proj } = doc, n = route.X.length, o = { ...PLAN, ...opts };
   let iA = Math.max(0, Math.min(iFrom, n - 1)), iB = Math.max(0, Math.min(iTo, n - 1));
-  while (iA > 0 && route.node[iA] < 0) iA--;
-  while (iB < n - 1 && route.node[iB] < 0) iB++;
+  // A must be a street node the car can drive on from (not the apex of a turn-back, not on a piece
+  // the planner should not have used); B a street node whose next piece is drivable
+  const apex = (i) => i > 0 && i < n - 1 && route.half[i - 1] >= 0 && route.half[i] === (route.half[i - 1] ^ 1);
+  const badA = (i) => route.node[i] < 0 || apex(i) || (i > 0 && (route.half[i - 1] < 0 || !net.allowed(route.half[i - 1])));
+  const badB = (i) => route.node[i] < 0 || apex(i) || (i < n - 1 && (route.half[i] < 0 || !net.allowed(route.half[i])));
+  while (iA > 0 && badA(iA)) iA--;
+  while (iB < n - 1 && badB(iB)) iB++;
   if (iB <= iA) return null;
   let starts;
   if (iA > 0 && route.half[iA - 1] >= 0) starts = [{ h: route.half[iA - 1], remain: 0, x: route.X[iA], y: route.Y[iA] }];

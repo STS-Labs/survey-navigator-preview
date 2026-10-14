@@ -131,7 +131,7 @@ check(E.writeGpx(docs.get(heavy), { name: 'A & B <c>' }).includes('<name>A &amp;
 /* T6: rerouting between two points follows legal streets and removes the U-turn in between */
 section('T6 reroute');
 {
-  const doc = docs.get(heavy), r = doc.route, n = r.X.length;
+  const doc = docs.get(heavy), r = doc.route, n = r.X.length, net = doc.net;
   // picking vertices on the map
   const i = Math.floor(n / 2);
   check(E.nearestVertex(doc, r.X[i], r.Y[i]) === i || dist(r, E.nearestVertex(doc, r.X[i], r.Y[i]), i) < 0.5, 'nearestVertex finds the vertex under the cursor');
@@ -163,6 +163,16 @@ section('T6 reroute');
   console.log(`  reroute ${iA}->${iB}: ${res.deltaMeters.toFixed(0)} m, lost ${res.coverage.lostMeters.toFixed(0)} m, gained ${res.coverage.gainedMeters.toFixed(0)} m`);
   E.undo(doc);
   check(doc.points.length === before.n && !doc.dirty, 'undo restores the route');
+
+  // A naive point A on the apex of a dead end (or on a piece the car may not drive) must be moved
+  const around = (u) => { let a = u.a; while (a > 0 && (r.node[a] < 0 || r.along[u.a] - r.along[a] < 60)) a--; let b = u.b; while (b < n - 1 && (r.node[b] < 0 || r.along[b] - r.along[u.b] < 60)) b++; return [a, b]; };
+  const stuck = doc.uturns.filter((v) => v.type === 'midStreet').map((v) => [v, ...around(v)]).find(([, a]) => a > 0 && (net.deg[r.node[a]] === 1 || !net.allowed(r.half[a - 1])));
+  if (stuck) {
+    const [v, a, b] = stuck;
+    const pv = E.previewReroute(doc, a, b);
+    check(!!pv, `reroute around the mid-street U-turn at ${(v.along / 1000).toFixed(2)} km finds a path although A sits on a dead end`);
+    check(pv && pv.range.iA < a && pv.uturnsInside.length === 0, 'A was moved back past the dead end and the new stretch has no U-turn');
+  } else console.log('  (no mid-street U-turn with a stuck A on this file)');
 }
 
 /* T7: moving and deleting single vertices */
