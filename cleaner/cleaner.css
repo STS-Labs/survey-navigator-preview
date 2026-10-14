@@ -91,6 +91,12 @@ select {
   color: var(--t1); font: 600 13px/1.2 var(--font);
 }
 .basemap.on { background: var(--violet-strong); border-color: transparent; box-shadow: var(--glow); color: #fff; }
+.basemap.parking { bottom: 144px; }
+.basemap:disabled { opacity: .45; }
+.parking-card { position: fixed; z-index: 10; right: 12px; bottom: 190px; width: 300px; }
+.parking-card .legend { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--t3); font-size: 12px; }
+.parking-card .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-left: 6px; opacity: .85; }
+.parking-card .sw:first-child { margin-left: 0; }
 
 .maplibregl-ctrl-bottom-right { right: 12px; bottom: 12px; }
 .maplibregl-ctrl-group { background: var(--glass); border: 1px solid var(--hair); }

@@ -17,6 +17,11 @@ try {
   check(r.status === 200 && /javascript/.test(r.headers.get('content-type')) && r.headers.get('cache-control') === 'no-store', 'serves a module with the right type and no caching');
   r = await fetch(base + '/data/routes/day_01_nav.gpx');
   check(r.status === 200 && /gpx/.test(r.headers.get('content-type')), 'serves a GPX with a gpx type');
+  r = await fetch(base + '/data/parking.geojson');
+  const parking = r.status === 200 ? await r.json() : null;
+  check(r.status === 200 && /geo\+json/.test(r.headers.get('content-type')), 'serves the parking bays as GeoJSON');
+  check(parking && parking.type === 'FeatureCollection' && parking.features.length === 3305, `parking file holds the 3305 bays (${parking && parking.features.length})`);
+  check(parking && parking.features.every((f) => f.properties.id && f.properties.addr && f.properties.zone && typeof f.properties.cars === 'number'), 'every bay has id, address, zone and spaces');
   r = await fetch(base + '/nothing-here.txt');
   check(r.status === 404, 'unknown file is 404');
   r = await fetch(base + '/../../../etc/passwd');

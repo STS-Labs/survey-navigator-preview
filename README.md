@@ -118,7 +118,10 @@ stretch), **Reroute** (click A, then B further along: the stretch between is rep
 real streets with no U-turn, previewed in green with what it loses in red, `←` `→` choose another pass
 of the same street for B), **Points** (drag a vertex, it snaps to the street; select a range and press
 Delete). The **Satellite** button (or `s`) puts Esri imagery under the street names, to see whether a spur
-is a street, a yard or a car park. The tool warns about lost coverage, wrong-way pieces and banned turns but never blocks an edit;
+is a street, a yard or a car park. **Parking** (or `k`) draws the city's parking bays from
+`data/parking.geojson` (pink: zone A, paid; teal: ALL) with the address and number of spaces of the bay
+under the cursor; rebuild that file from the Tbilisi-Parking-Study shapefile with
+`sh tools/build_parking.sh [path/to/parking_09.shp]` (needs GDAL). The tool warns about lost coverage, wrong-way pieces and banned turns but never blocks an edit;
 every edit can be undone. **Save** writes `data/routes/<name>_clean.gpx` (the original is never changed):
 a GPX with the planned points regenerated at every instruction and the track, which the app drives like
 any other file. The OsmAnd routing block of the originals is not reproduced.

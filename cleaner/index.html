@@ -15,6 +15,8 @@
 <body>
   <div id="map"></div>
   <button id="btnBasemap" class="basemap glass" title="Satellite imagery under the street names (s)">Satellite</button>
+  <button id="btnParking" class="basemap parking glass" title="The city's parking bays (k)">Parking</button>
+  <section id="parkingCard" class="card glass parking-card" hidden></section>
 
   <aside class="panel glass">
     <header class="p-head">
@@ -73,7 +75,7 @@
         <dt>Enter / Esc</dt><dd>apply / cancel a preview</dd>
         <dt>Alt + drag, Alt + Delete</dt><dd>move without snapping, delete with a plain fill</dd>
         <dt>⌘Z / ⇧⌘Z / ⌘S</dt><dd>undo / redo / save</dd>
-        <dt>f · u · s</dt><dd>fit the route · toggle U-turn markers · satellite / map</dd>
+        <dt>f · u · s · k</dt><dd>fit the route · toggle U-turn markers · satellite / map · parking bays</dd>
       </dl>
     </details>
   </aside>

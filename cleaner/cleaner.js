@@ -22,6 +22,8 @@ let map, mapReady = false, doc = null, netDoc = null, files = [];
 const S = {
   mode: 'select', sel: null, hover: null, markers: true, last: null,
   basemap: (() => { try { return localStorage.getItem('cleaner.basemap') || 'night'; } catch { return 'night'; } })(),
+  parking: (() => { try { return localStorage.getItem('cleaner.parking') || 'off'; } catch { return 'off'; } })(),
+  parkingHover: null,
   pick: { a: null, b: null, cands: [], ci: 0 }, preview: null,
   pts: { sel: new Set(), anchor: null, drag: null },
   filters: { deadEnd: true, spur: true, midStreet: true },
@@ -82,7 +84,7 @@ function startMap() {
   map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-right');
   map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
   map.on('style.load', nightTheme);
-  map.on('load', () => { calmMap(); addLayers(); rememberBaseVisibility(); applyBasemap(); mapReady = true; if (doc) { renderMap(); fitRoute(); } });
+  map.on('load', () => { calmMap(); addLayers(); rememberBaseVisibility(); applyBasemap(); applyParking(); mapReady = true; if (doc) { renderMap(); fitRoute(); } loadParking(); });
   map.on('click', onClick);
   map.on('mousemove', onMove);
   map.on('mousedown', onDown);
@@ -147,9 +149,11 @@ function addSatellite() {
   map.addLayer({ id: 'sat', type: 'raster', source: 'sat', layout: { visibility: 'none' }, paint: { 'raster-fade-duration': 0 } }, above && above.id);
 }
 
+// Only the street map's own layers: ours (imagery, parking, route) have their own switches
+const OWN_SOURCES = new Set(['sat', 'parking', 'route', 'spur', 'lost', 'preview', 'verts', 'uturns', 'picks', 'drag']);
 function rememberBaseVisibility() {
   baseVis = new Map();
-  for (const l of map.getStyle().layers) baseVis.set(l.id, map.getLayoutProperty(l.id, 'visibility') || 'visible');
+  for (const l of map.getStyle().layers) if (!OWN_SOURCES.has(l.source)) baseVis.set(l.id, map.getLayoutProperty(l.id, 'visibility') || 'visible');
 }
 
 function applyBasemap() {
@@ -170,6 +174,89 @@ function applyBasemap() {
 function toggleBasemap() {
   S.basemap = S.basemap === 'satellite' ? 'night' : 'satellite';
   if (mapReady) applyBasemap();
+}
+
+/* ------------------------------------------------------------------ parking bays */
+
+// The city's parking database (Tbilisi-Parking-Study, converted by tools/build_parking.sh):
+// one polygon per on-street bay, zone A (paid) or ALL, with its address and number of spaces.
+const PARKING = { A: '#f472b6', ALL: '#2dd4bf' };
+let parkingData = null;
+
+function addParkingLayers(before) {
+  map.addSource('parking', { type: 'geojson', data: EMPTY, promoteId: 'id' });
+  const color = ['match', ['get', 'zone'], 'A', PARKING.A, PARKING.ALL];
+  const vis = { visibility: S.parking === 'on' ? 'visible' : 'none' };
+  map.addLayer({ id: 'parking-fill', type: 'fill', source: 'parking', minzoom: 13, layout: vis, paint: { 'fill-color': color, 'fill-opacity': 0.32 } }, before);
+  // bays are only ~3 m wide: below zoom 16 the outline is what shows them along the streets
+  map.addLayer({ id: 'parking-line', type: 'line', source: 'parking', minzoom: 13, layout: { ...vis, 'line-join': 'round' }, paint: { 'line-color': color, 'line-width': ['interpolate', ['linear'], ['zoom'], 13, 1.6, 16, 1.8, 18, 2.5], 'line-opacity': ['interpolate', ['linear'], ['zoom'], 13, 0.9, 17, 0.7] } }, before);
+  map.addLayer({ id: 'parking-hover', type: 'line', source: 'parking', filter: ['==', ['get', 'id'], ''], layout: vis, paint: { 'line-color': '#ffffff', 'line-width': 2.5 } }, before);
+  map.addLayer({
+    id: 'parking-label', type: 'symbol', source: 'parking', minzoom: 17, layout: { ...vis, 'text-field': ['to-string', ['get', 'cars']], 'text-size': 11, 'text-font': ['Noto Sans Bold'], 'symbol-placement': 'point' },
+    paint: { 'text-color': '#f2f3f7', 'text-halo-color': '#0d0f17', 'text-halo-width': 1.2 },
+  }, before);
+}
+
+async function loadParking() {
+  try {
+    const r = await fetch('../data/parking.geojson');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    parkingData = await r.json();
+  } catch (e) {
+    toast('No parking data (data/parking.geojson): run sh tools/build_parking.sh. ' + e.message);
+    $('btnParking').disabled = true;
+    return;
+  }
+  map.getSource('parking').setData(parkingData);
+  renderParkingCard();
+}
+
+function applyParking() {
+  const on = S.parking === 'on';
+  for (const id of ['parking-fill', 'parking-line', 'parking-hover', 'parking-label']) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+  $('btnParking').classList.toggle('on', on);
+  $('parkingCard').hidden = !on;
+  if (!on) setParkingHover(null);
+  try { localStorage.setItem('cleaner.parking', S.parking); } catch { /* private mode */ }
+  renderParkingCard();
+}
+
+function toggleParking() {
+  S.parking = S.parking === 'on' ? 'off' : 'on';
+  if (mapReady) applyParking();
+}
+
+function setParkingHover(p) {
+  const id = p ? p.id : null;
+  if (id === S.parkingHover) return;
+  S.parkingHover = id;
+  map.setFilter('parking-hover', ['==', ['get', 'id'], id == null ? '' : id]);
+  renderParkingCard(p);
+}
+
+const num = (n) => (n == null ? '' : Number(n).toLocaleString('en-US'));
+function renderParkingCard(p = null) {
+  const card = $('parkingCard');
+  if (S.parking !== 'on') { card.hidden = true; return; }
+  card.hidden = false;
+  const legend = `<div class="legend"><i class="sw" style="background:${PARKING.A}"></i>zone A, paid <i class="sw" style="background:${PARKING.ALL}"></i>ALL</div>`;
+  if (!p) {
+    let bays = 0, cars = 0;
+    if (parkingData) { bays = parkingData.features.length; for (const f of parkingData.features) cars += f.properties.cars || 0; }
+    card.innerHTML = `<h2>Parking bays</h2><div class="meta">${parkingData ? `${num(bays)} bays, ${num(cars)} spaces. Hover a bay for its details.` : 'Loading…'}</div>${legend}`;
+    return;
+  }
+  const extras = [];
+  if (p.disabled) extras.push(`${p.disabled} disabled`);
+  if (p.taxi) extras.push(`${p.taxi} taxi`);
+  if (p.ev) extras.push(`${p.ev} EV`);
+  card.innerHTML = `
+    <h2><span class="type" style="background:${PARKING[p.zone] || PARKING.ALL}">${escapeHtml(p.zone)}${p.zone === 'A' ? ' · paid' : ''}</span> ${escapeHtml(p.id)}</h2>
+    <div class="meta">
+      <b>${escapeHtml(p.addr || '(no address)')}</b><br>
+      <b>${num(p.cars)}</b> spaces${extras.length ? ' (' + extras.join(', ') + ')' : ''}<br>
+      layout ${p.layout ?? '–'} · method ${p.method ?? '–'} · type ${p.type ?? '–'}${p.list ? ' · list ' + escapeHtml(p.list) : ''}${p.note && p.note !== p.id ? '<br>' + escapeHtml(p.note) : ''}
+    </div>${legend}`;
 }
 
 function makeIcon(draw, size) {
@@ -195,6 +282,7 @@ function addLayers() {
   const line = (id, src, color, width, paint = {}, before = firstLabel) => map.addLayer({
     id, type: 'line', source: src, layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': color, 'line-width': width, ...paint },
   }, before);
+  addParkingLayers(firstLabel);
   line('route-glow', 'route', '#8b5cf6', zw(6, 20), { 'line-blur': zw(4, 12), 'line-opacity': 0.35 });
   line('route', 'route', '#3d7bff', zw(2.2, 7));
   map.addLayer({
@@ -329,6 +417,10 @@ function onClick(e) {
 
 let moveQueued = false;
 function onMove(e) {
+  if (S.parking === 'on' && parkingData && !S.pts.drag) {
+    const f = map.queryRenderedFeatures(e.point, { layers: ['parking-fill'] });
+    setParkingHover(f.length ? f[0].properties : null);
+  }
   if (!doc) return;
   if (S.pts.drag) {
     setData('drag', fc([{ type: 'Feature', geometry: { type: 'Point', coordinates: [e.lngLat.lng, e.lngLat.lat] } }]));
@@ -502,6 +594,7 @@ function bindPanel() {
   $('btnDownload').addEventListener('click', () => download(E.cleanName(doc.file)));
   $('btnRevert').addEventListener('click', revert);
   $('btnBasemap').addEventListener('click', toggleBasemap);
+  $('btnParking').addEventListener('click', toggleParking);
   $('toastBtn').addEventListener('click', () => { if (toastAction) toastAction(); hideToast(); });
   $('list').addEventListener('click', (e) => { const li = e.target.closest('li[data-k]'); if (li) select(+li.dataset.k); });
   $('selCard').addEventListener('click', onCardClick);
@@ -548,12 +641,13 @@ function onKey(e) {
     case '3': setMode('reroute'); break;
     case '4': setMode('points'); break;
     case 'n': case 'N': case 'j': { if (!visible.length) break; const k = visible.findIndex((v) => v.k === S.sel); select(visible[(k + 1) % visible.length].k); break; }
-    case 'p': case 'P': case 'k': { if (!visible.length) break; const k = visible.findIndex((v) => v.k === S.sel); select(visible[(k - 1 + visible.length) % visible.length].k); break; }
+    case 'p': case 'P': { if (!visible.length) break; const k = visible.findIndex((v) => v.k === S.sel); select(visible[(k - 1 + visible.length) % visible.length].k); break; }
     case 'x': case 'X': if (u) doCut(u); break;
     case 'r': case 'R': if (u) rerouteAround(u); break;
     case 'f': case 'F': fitRoute(); break;
     case 'u': case 'U': S.markers = !S.markers; renderMap(); break;
     case 's': case 'S': toggleBasemap(); break;
+    case 'k': case 'K': toggleParking(); break;
     case 'ArrowLeft': if (S.mode === 'reroute') { e.preventDefault(); cycleB(-1); } break;
     case 'ArrowRight': if (S.mode === 'reroute') { e.preventDefault(); cycleB(1); } break;
     case 'Enter': if (S.preview) { e.preventDefault(); applyPreview(); } break;
