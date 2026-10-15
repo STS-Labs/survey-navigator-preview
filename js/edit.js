@@ -224,13 +224,33 @@ export function mirrorVertex(route, i, lo, hi) {
 
 // Shorten the out-and-back of U-turn u: the car turns back at vertex i instead of at the apex.
 // i may be on the way out (a <= i < apex) or on the way back (apex < i <= b); both give the same route.
-export function trimSpur(doc, u, i) {
-  if (!u || !(u.K > 0) || u.b <= u.a) return null;
-  if (i < u.a || i > u.b || i === u.i) return null;
-  const { route } = doc;
+// Where a spur is cut when the car should turn back at vertex i: t is the last way-out vertex at or
+// before that spot, m the first way-back vertex at or after it (measured as distance from the base,
+// so the two legs line up even when their vertices do not coincide).
+export function trimRange(route, u, i) {
+  if (!u || !(u.K > 0) || u.b <= u.a || i < u.a || i > u.b || i === u.i) return null;
+  const A = route.along;
   let t, m;
-  if (i < u.i) { t = i; m = mirrorVertex(route, i, u.i + 1, u.b); }
-  else { m = i; t = mirrorVertex(route, i, u.a, u.i - 1); }
+  if (i < u.i) {
+    t = i;
+    const d = A[t] - A[u.a];
+    m = u.b;
+    while (m - 1 > u.i && A[u.b] - A[m - 1] <= d + 0.5) m--;
+  } else {
+    m = i;
+    const d = A[u.b] - A[m];
+    t = u.a;
+    while (t + 1 < u.i && A[t + 1] - A[u.a] <= d + 0.5) t++;
+  }
+  return { t, m };
+}
+
+// Shorten the out-and-back of U-turn u: the car turns back at vertex i instead of at the apex.
+// i may be on the way out (a <= i < apex) or on the way back (apex < i <= b); both give the same route.
+export function trimSpur(doc, u, i) {
+  const tr = trimRange(doc.route, u, i);
+  if (!tr) return null;
+  const { t, m } = tr, { route } = doc;
   if (t <= u.a) return cutSpur(doc, u);
   if (m <= t) return null;
   const newPoints = doc.points.slice(0, t + 1).concat(doc.points.slice(m));
