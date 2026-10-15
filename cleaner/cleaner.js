@@ -70,7 +70,7 @@ async function loadFile(file) {
   } catch (e) { showLoading(null); toast('Could not open ' + file + ': ' + e.message); return; }
   showLoading(null);
   location.hash = file;
-  S.sel = null; S.hover = null; S.trim = null; S.last = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.anchor = null;
+  S.sel = null; S.hover = null; S.trim = null; S.last = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.anchor = null; clearPointHover();
   $('target').textContent = 'data/routes/' + E.cleanName(file);
   for (const id of ['btnSave', 'btnDownload', 'btnRevert']) $(id).disabled = false;
   renderAll();
@@ -323,12 +323,15 @@ function renderMap() {
   setData('route', fc([lineFeature(coordsOf(r, 0, r.X.length - 1))]));
   const vis = (u) => S.markers && S.filters[u.type];
   setData('uturns', fc(doc.uturns.filter(vis).map((u) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [u.lon, u.lat] }, properties: { k: u.k, color: COLORS[u.type], sel: u.k === S.sel ? 1 : 0 } }))));
+  const tr = S.mode === 'cut' ? S.trim : null;
   const ext = S.mode === 'cut' && S.hover != null ? doc.uturns[S.hover] : S.sel != null ? doc.uturns[S.sel] : null;
   setData('spur', fc([ext && ext.K > 0 ? lineFeature(coordsOf(r, ext.a, ext.b)) : null]));
-  const tr = S.mode === 'cut' ? S.trim : null;
   setData('trim', fc([tr && tr.m > tr.t ? lineFeature(coordsOf(r, tr.t, tr.m)) : null]));
   setData('trimdot', fc(tr ? [{ type: 'Feature', geometry: { type: 'Point', coordinates: [r.lon[tr.t], r.lat[tr.t]] } }] : []));
-  const lost = S.preview ? S.preview.coverage.lost : S.last && S.last.coverage ? S.last.coverage.lost : ext ? ext.verdict.lost : [];
+  const lost = S.preview ? S.preview.coverage.lost
+    : S.last && S.last.coverage ? S.last.coverage.lost
+    : tr && tr.t > tr.u.a ? E.verdictForRange(doc, tr.t, tr.m).lost
+    : ext ? ext.verdict.lost : [];
   setData('lost', fc(lost.map((l) => segLine(l.s))));
   setData('preview', fc([S.preview ? lineFeature(pointsCoords(S.preview.path)) : null]));
   const picks = [];
@@ -452,8 +455,9 @@ function onMove(e) {
     return;
   }
   if (S.mode === 'points') {
-    const [x, y] = toXY(e.lngLat), i = E.nearestVertex(doc, x, y, { tol: tol() });
-    if (i !== S.pts.hover) { S.pts.hover = i < 0 ? null : i; map.setFilter('verts-hover', ['==', ['get', 'i'], i]); map.getCanvas().style.cursor = i >= 0 ? 'grab' : (E.nearestSegment(doc, x, y, tol()) ? 'copy' : ''); }
+    const [x, y] = toXY(e.lngLat), i = E.nearestVertex(doc, x, y, { tol: tol() }), h = i < 0 ? null : i;
+    if (h !== S.pts.hover) { S.pts.hover = h; map.setFilter('verts-hover', ['==', ['get', 'i'], i]); }
+    map.getCanvas().style.cursor = i >= 0 ? 'grab' : (E.nearestSegment(doc, x, y, tol()) ? 'copy' : '');
     return;
   }
   if (S.mode !== 'cut' || moveQueued) return;
@@ -471,7 +475,7 @@ function onDown(e) {
   const [x, y] = toXY(e.lngLat);
   const i = S.pts.anchor != null && E.verticesNear(doc, x, y, tol()).some((v) => v.i === S.pts.anchor) ? S.pts.anchor : E.nearestVertex(doc, x, y, { tol: tol() });
   if (i < 0) return;
-  S.pts.drag = { i, alt: e.originalEvent.altKey };
+  S.pts.drag = { i, alt: e.originalEvent.altKey, start: e.point };
   map.dragPan.disable();
   map.getContainer().classList.add('dragging');
 }
@@ -482,6 +486,7 @@ function onUp(e) {
   S.pts.drag = null;
   map.dragPan.enable();
   map.getContainer().classList.remove('dragging');
+  if (Math.hypot(e.point.x - d.start.x, e.point.y - d.start.y) < 4) { renderMap(); return; }   // a click, not a drag: onClick selects
   const res = E.movePoint(doc, d.i, e.lngLat.lat, e.lngLat.lng, { snap: !(d.alt || e.originalEvent.altKey) });
   if (!res) return renderMap();
   S.pts.sel.clear(); S.pts.sel.add(res.index); S.pts.anchor = res.index;
@@ -511,9 +516,9 @@ function doCut(u) {
 function doTrim(u, t) {
   const r = doc.route, back = km(r.along[t]);
   const res = E.trimSpur(doc, u, t);
-  if (!res) return toast('Cannot trim here: pick a point on the spur, not its apex.');
+  if (!res) return toast('Cannot trim here.');
   const lost = res.coverage.lostMeters;
-  afterEdit(res, `Trimmed spur at ${km(u.along)}: ${sign(res.deltaMeters)}, the car now turns back at ${back}. ` + (lost >= 1 ? `Loses ${m0(lost)} of ${[...new Set(res.coverage.lost.map((l) => l.name))].join(', ')}.` : 'Every street is still driven elsewhere.'), true);
+  afterEdit(res, `Trimmed spur at ${km(u.along)}: ${sign(res.deltaMeters)}, the car now turns back at ${back}. ` + (lost >= 1 ? `Loses ${m0(lost)} of ${[...new Set(res.coverage.lost.map((l) => l.name))].join(', ')}.` : 'Every street is still driven elsewhere.') + ' ' + legalityText(res.legality), true);
 }
 
 function rerouteAround(u) {
@@ -564,7 +569,7 @@ function legalityText(l) {
 }
 
 function afterEdit(res, message, undoable = false) {
-  S.last = res; S.preview = null; S.trim = null; resetPick();
+  S.last = res; S.preview = null; S.trim = null; clearPointHover(); resetPick();
   const prev = S.sel != null ? doc.uturns[S.sel] : null;      // the list is rebuilt: find the same U-turn by position
   S.sel = null; S.hover = null;
   if (prev) {
@@ -577,13 +582,15 @@ function afterEdit(res, message, undoable = false) {
   if (message) toast(message, undoable ? doUndo : null);
 }
 
-function doUndo() { if (E.undo(doc)) { S.last = null; S.trim = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.hover = null; if (mapReady) map.setFilter('verts-hover', ['==', ['get', 'i'], -1]); hideToast(); renderAll(); } }
-function doRedo() { if (E.redo(doc)) { S.last = null; S.trim = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.hover = null; if (mapReady) map.setFilter('verts-hover', ['==', ['get', 'i'], -1]); hideToast(); renderAll(); } }
+function doUndo() { if (E.undo(doc)) { S.last = null; S.trim = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.anchor = null; clearPointHover(); hideToast(); renderAll(); } }
+function doRedo() { if (E.redo(doc)) { S.last = null; S.trim = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.anchor = null; clearPointHover(); hideToast(); renderAll(); } }
 function resetPick() { S.pick = { a: null, b: null, cands: [], ci: 0 }; }
+
+function clearPointHover() { S.pts.hover = null; if (mapReady) map.setFilter('verts-hover', ['==', ['get', 'i'], -1]); }
 
 function setMode(mode) {
   if (S.mode === mode) return;
-  S.mode = mode; S.hover = null; S.trim = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.anchor = null; S.pts.hover = null; if (mapReady) map.setFilter('verts-hover', ['==', ['get', 'i'], -1]);
+  S.mode = mode; S.hover = null; S.trim = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.anchor = null; clearPointHover();
   const c = map.getContainer().classList;
   for (const m of ['select', 'cut', 'reroute', 'points']) c.toggle('mode-' + m, m === mode);
   map.getCanvas().style.cursor = '';

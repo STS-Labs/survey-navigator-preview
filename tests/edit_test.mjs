@@ -207,9 +207,7 @@ section('T7 movePoint / deletePoints');
   const [x, y] = doc.proj.toXY(la, lo), bx = (r.X[j + 1] - r.X[j - 1]), by = (r.Y[j + 1] - r.Y[j - 1]), L = Math.hypot(bx, by);
   const [sla, slo] = doc.proj.toLL(x - 10 * by / L, y + 10 * bx / L);
   const mv = E.movePoint(doc, j, sla, slo, { snap: true });
-  check(!!mv && dist(doc.route, j, j) === 0 && Math.hypot(doc.route.X[j] - x, doc.route.Y[j] - y) < 0.5, 'snapped move returns to the street node');
-  check(Math.abs(mv.deltaMeters) < 1 && mv.legality.offStreet < 0.5, 'snapped move leaves the route on the street');
-  E.undo(doc);
+  check(mv === null && doc.history.length === 0, 'a snapped move that falls back onto the vertex\'s own street node is not an edit');
   const raw = E.movePoint(doc, j, sla, slo, { snap: false });
   check(!!raw && raw.legality.offStreet > 5, `unsnapped move is reported off the street (${raw && raw.legality.offStreet.toFixed(1)} m)`);
   check(Math.hypot(doc.route.X[j] - x, doc.route.Y[j] - y) > 9, 'unsnapped vertex stays where it was dropped');
@@ -231,6 +229,8 @@ section('T7 movePoint / deletePoints');
     check(!!mv2 && Math.abs(doc.route.X[mateAfter] - r.X[shared]) < 0.5 && Math.abs(doc.route.Y[mateAfter] - r.Y[shared]) < 0.5, 'the other pass through the spot stays put');
     E.undo(doc);
   } else console.log('  (no shared spot found)');
+  const same = E.movePoint(doc, j, doc.points[j][0], doc.points[j][1]);
+  check(same === null && doc.history.length === 0 && !doc.dirty, 'moving a vertex onto its own spot is not an edit');
   check(doc.points === before.points || doc.points.every((p, k) => p[0] === before.points[k][0] && p[1] === before.points[k][1]), 'undo restores the route');
 }
 
@@ -253,6 +253,7 @@ for (const f of [heavy, ...[...docs.keys()].filter((p) => p !== heavy && p.endsW
   check(doc.uturns.length <= before.uturns && doc.uturns.some(near), `${name}: the U-turn now sits at the trim point`);
   check(doc.points.slice(0, t + 1).every((p, k) => p[0] === before.points[k][0] && p[1] === before.points[k][1]), `${name}: route up to the trim point is untouched`);
   check(res.label.includes('trim') && res.range.iA === t, `${name}: result is labelled and reports the trim point`);
+  check(res.legality && Array.isArray(res.legality.wrongWay), `${name}: trim reports legality at the join`);
   E.undo(doc);
   // from the way back: click the vertex nearest the same distance from the base; the turn-back lands at that distance
   const d = r.along[t] - r.along[u.a];
@@ -334,6 +335,24 @@ section('T10 nearestSegment / insertPoint');
     E.undo(doc);
   } else console.log('  (no shared spot found)');
   check(E.insertPoint(doc, n - 1, la, lo) === null && E.insertPoint(doc, -1, la, lo) === null, 'cannot insert after the last vertex or before the first');
+  // inserting on top of an existing vertex is not an edit
+  const atNode = E.insertPoint(doc, s, doc.points[s][0], doc.points[s][1]);
+  check(atNode === null && doc.history.length === 0, 'inserting at an existing vertex is refused');
+  const atNext = E.insertPoint(doc, s, doc.points[s + 1][0], doc.points[s + 1][1]);
+  check(atNext === null && doc.history.length === 0, 'inserting at the next vertex is refused');
+  // inserting beyond the next street node: the engine re-inserts that node, and index still names the new point
+  let s2 = -1;
+  for (let k = 1; k < n - 3; k++) if ([k, k + 1, k + 2].every((v) => r.node[v] >= 0 && net.deg[r.node[v]] === 2) && [k, k + 1].every((v) => r.half[v] >= 0) && r.along[k + 2] - r.along[k + 1] > 30) { s2 = k; break; }
+  check(s2 > 0, 'found two consecutive street pieces between mid-block nodes');
+  if (s2 > 0) {
+    const fx = r.X[s2 + 1] + 0.6 * (r.X[s2 + 2] - r.X[s2 + 1]), fy = r.Y[s2 + 1] + 0.6 * (r.Y[s2 + 2] - r.Y[s2 + 1]);
+    const [fla2, flo2] = doc.proj.toLL(fx, fy);
+    const across = E.insertPoint(doc, s2, fla2, flo2);
+    check(!!across && Math.hypot(doc.route.X[across.index] - fx, doc.route.Y[across.index] - fy) < 0.5, `index names the new point even when the engine re-inserts the street node in between (${across && across.index})`);
+    const back = 2 * 0.6 * (r.along[s2 + 2] - r.along[s2 + 1]);
+    check(!!across && doc.points.length === n + 2 && Math.abs(across.deltaMeters - back) < 1, `the route runs out through the node to the new point and back (${across && across.deltaMeters.toFixed(1)} m vs ${back.toFixed(1)}; ${doc.points.length} vs ${n + 2} points)`);
+    E.undo(doc);
+  }
 }
 
 console.log(`\n${passes} passed, ${failures} failed`);

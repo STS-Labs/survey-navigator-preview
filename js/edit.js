@@ -278,7 +278,9 @@ export function trimSpur(doc, u, i) {
   if (t <= u.a) return cutSpur(doc, u);
   if (m <= t) return null;
   const newPoints = doc.points.slice(0, t + 1).concat(doc.points.slice(m));
-  return commit(doc, `trim spur at ${km(u.along)} back to ${km(route.along[t])}${u.name ? ' (' + u.name + ')' : ''}`, newPoints, { range: { iA: t, iB: t } });
+  const res = commit(doc, `trim spur at ${km(u.along)} back to ${km(route.along[t])}${u.name ? ' (' + u.name + ')' : ''}`, newPoints, { range: { iA: t, iB: t } });
+  res.legality = legality(doc.route, doc.net, Math.max(0, t - 1), Math.min(doc.route.X.length - 1, t + 1));
+  return res;
 }
 
 /* ------------------------------------------------------------------ legality */
@@ -370,6 +372,8 @@ export function movePoint(doc, i, lat, lon, { snap = true } = {}) {
   if (i < 0 || i >= doc.points.length) return null;
   let [x, y] = proj.toXY(lat, lon);
   if (snap) { const q = net.snap(x, y, 8, SNAP_RADIUS); if (q) { x = q.x; y = q.y; } }
+  const [cx, cy] = proj.toXY(doc.points[i][0], doc.points[i][1]);
+  if (Math.hypot(x - cx, y - cy) < 0.3) return null;                  // dropped where it already was
   const [la, lo] = proj.toLL(x, y);
   const points = doc.points.slice();
   points[i] = [round6(la), round6(lo)];
@@ -388,6 +392,10 @@ export function insertPoint(doc, i, lat, lon, { snap = true } = {}) {
   if (i < 0 || i >= n - 1) return null;
   let [x, y] = proj.toXY(lat, lon);
   if (snap) { const q = net.snap(x, y, 8, SNAP_RADIUS); if (q) { x = q.x; y = q.y; } }
+  for (const v of [i, i + 1]) {                                        // on top of an existing vertex: nothing to add
+    const [vx, vy] = proj.toXY(doc.points[v][0], doc.points[v][1]);
+    if (Math.hypot(x - vx, y - vy) < 0.3) return null;
+  }
   const [la, lo] = proj.toLL(x, y);
   const points = doc.points.slice(0, i + 1).concat([[round6(la), round6(lo)]], doc.points.slice(i + 1));
   const res = commit(doc, `add point at ${km(route.along[i])}`, points, {});
