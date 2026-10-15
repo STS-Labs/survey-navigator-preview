@@ -9,7 +9,7 @@ const NIGHT = { bg: '#10121b', water: '#090b12', park: '#11161e', land: '#12141e
   casing: '#0d0f17', rail: '#1f2231', label: '#8d93a7', halo: '#0d0f17', waterLabel: '#4c5a82' };
 const HINT = {
   select: 'Click a U-turn marker or a list row. n / p step through them.',
-  cut: 'Hover a spur (orange) and click to remove the out-and-back stretch.',
+  cut: 'Hover a spur: red is what goes, the white dot is where the car will turn back. Click to trim there; click near the base to drop the whole spur.',
   reroute: 'Click point A on the route, then point B further along: the stretch between is replaced by a legal, U-turn-free path.',
   points: 'Drag a vertex (Alt: no snapping). Click / shift-click to select a range, Delete removes it (Alt: plain fill).',
 };
@@ -20,7 +20,7 @@ const sign = (m) => (m > 0 ? '+' : m < 0 ? '−' : '') + m0(Math.abs(m));
 
 let map, mapReady = false, doc = null, netDoc = null, files = [];
 const S = {
-  mode: 'select', sel: null, hover: null, markers: true, last: null,
+  mode: 'select', sel: null, hover: null, trim: null, markers: true, last: null,
   basemap: (() => { try { return localStorage.getItem('cleaner.basemap') || 'night'; } catch { return 'night'; } })(),
   parking: (() => { try { return localStorage.getItem('cleaner.parking') || 'off'; } catch { return 'off'; } })(),
   parkingHover: null,
@@ -150,7 +150,7 @@ function addSatellite() {
 }
 
 // Only the street map's own layers: ours (imagery, parking, route) have their own switches
-const OWN_SOURCES = new Set(['sat', 'parking', 'route', 'spur', 'lost', 'preview', 'verts', 'uturns', 'picks', 'drag']);
+const OWN_SOURCES = new Set(['sat', 'parking', 'route', 'spur', 'trim', 'trimdot', 'lost', 'preview', 'verts', 'uturns', 'picks', 'drag']);
 function rememberBaseVisibility() {
   baseVis = new Map();
   for (const l of map.getStyle().layers) if (!OWN_SOURCES.has(l.source)) baseVis.set(l.id, map.getLayoutProperty(l.id, 'visibility') || 'visible');
@@ -274,7 +274,7 @@ function addLayers() {
     g.beginPath(); g.moveTo(s * 0.32, s * 0.24); g.lineTo(s * 0.62, s * 0.5); g.lineTo(s * 0.32, s * 0.76); g.stroke();
   }, 32), { pixelRatio: 2 });
   addSatellite();
-  for (const id of ['route', 'spur', 'lost', 'preview', 'verts', 'uturns', 'picks', 'drag']) map.addSource(id, { type: 'geojson', data: EMPTY });
+  for (const id of ['route', 'spur', 'trim', 'trimdot', 'lost', 'preview', 'verts', 'uturns', 'picks', 'drag']) map.addSource(id, { type: 'geojson', data: EMPTY });
   const layers = map.getStyle().layers;
   const firstLabel = (layers.find((l) => l.type === 'symbol' && l['source-layer'] === 'transportation_name')
     || layers.find((l) => l.type === 'symbol' && l['source-layer'] === 'place') || {}).id;
@@ -291,6 +291,8 @@ function addLayers() {
     paint: { 'icon-opacity': 0.5 },
   }, firstLabel);
   line('spur', 'spur', '#fb923c', zw(5, 15), { 'line-opacity': 0.9 }, undefined);
+  line('trim', 'trim', '#f87171', zw(5, 15), { 'line-opacity': 0.95 }, undefined);
+  map.addLayer({ id: 'trimdot', type: 'circle', source: 'trimdot', paint: { 'circle-radius': 7, 'circle-color': '#ffffff', 'circle-stroke-color': '#0d0f17', 'circle-stroke-width': 2 } });
   line('lost', 'lost', '#f87171', zw(4, 12), { 'line-dasharray': [1.2, 1.2] }, undefined);
   line('preview-glow', 'preview', '#4ade80', zw(8, 24), { 'line-blur': zw(4, 12), 'line-opacity': 0.4 }, undefined);
   line('preview', 'preview', '#4ade80', zw(3.5, 10), { 'line-dasharray': [2, 1] }, undefined);
@@ -321,6 +323,9 @@ function renderMap() {
   setData('uturns', fc(doc.uturns.filter(vis).map((u) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [u.lon, u.lat] }, properties: { k: u.k, color: COLORS[u.type], sel: u.k === S.sel ? 1 : 0 } }))));
   const ext = S.mode === 'cut' && S.hover != null ? doc.uturns[S.hover] : S.sel != null ? doc.uturns[S.sel] : null;
   setData('spur', fc([ext && ext.K > 0 ? lineFeature(coordsOf(r, ext.a, ext.b)) : null]));
+  const tr = S.mode === 'cut' ? S.trim : null;
+  setData('trim', fc([tr && tr.m > tr.t ? lineFeature(coordsOf(r, tr.t, tr.m)) : null]));
+  setData('trimdot', fc(tr ? [{ type: 'Feature', geometry: { type: 'Point', coordinates: [r.lon[tr.t], r.lat[tr.t]] } }] : []));
   const lost = S.preview ? S.preview.coverage.lost : S.last && S.last.coverage ? S.last.coverage.lost : ext ? ext.verdict.lost : [];
   setData('lost', fc(lost.map((l) => segLine(l.s))));
   setData('preview', fc([S.preview ? lineFeature(pointsCoords(S.preview.path)) : null]));
@@ -354,13 +359,20 @@ function flyToVertex(i, zoom = 17) {
 
 /* ------------------------------------------------------------------ map interaction */
 
-function uturnAt(x, y) {
+// The spur under the cursor and where on it the car would turn back
+function trimAt(x, y) {
   for (const { i } of E.verticesNear(doc, x, y, tol() * 1.5)) {
     const u = doc.uturns.find((v) => v.K > 0 && v.a <= i && i <= v.b);
-    if (u) return u;
+    if (!u) continue;
+    const r = doc.route, tr = E.trimRange(r, u, i);
+    if (!tr) return { u, t: u.a, m: u.b };                                    // on the apex: the whole spur
+    let { t, m } = tr;
+    if (t <= u.a || r.along[t] - r.along[u.a] < 10) { t = u.a; m = u.b; }     // near the base: the whole spur
+    return { u, t, m };
   }
   return null;
 }
+const uturnAt = (x, y) => { const tr = trimAt(x, y); return tr ? tr.u : null; };
 
 // Passes of the route near a point, after vertex `after`: one candidate per pass, nearest first
 function passesNear(x, y, after) {
@@ -393,8 +405,9 @@ function onClick(e) {
     const u = uturnAt(x, y);
     if (u) select(u.k);
   } else if (S.mode === 'cut') {
-    const u = uturnAt(x, y);
-    if (u) doCut(u); else toast('No spur under the cursor.');
+    const tr = trimAt(x, y);
+    if (!tr) return toast('No spur under the cursor.');
+    if (tr.t === tr.u.a) doCut(tr.u); else doTrim(tr.u, tr.t);
   } else if (S.mode === 'reroute') {
     if (S.pick.a == null) {
       const i = E.nearestVertex(doc, x, y, { nodeOnly: true, tol: tol() * 2 });
@@ -430,8 +443,9 @@ function onMove(e) {
   moveQueued = true;
   requestAnimationFrame(() => {
     moveQueued = false;
-    const [x, y] = toXY(e.lngLat), u = uturnAt(x, y), k = u ? u.k : null;
-    if (k !== S.hover) { S.hover = k; renderMap(); map.getCanvas().style.cursor = u ? 'pointer' : ''; }
+    const [x, y] = toXY(e.lngLat), tr = trimAt(x, y);
+    const key = tr ? `${tr.u.k}:${tr.t}` : null, old = S.trim ? `${S.trim.u.k}:${S.trim.t}` : null;
+    if (key !== old) { S.trim = tr; S.hover = tr ? tr.u.k : null; renderMap(); map.getCanvas().style.cursor = tr ? 'pointer' : ''; }
   });
 }
 
@@ -472,6 +486,14 @@ function doCut(u) {
   if (!res) return toast('This U-turn has no out-and-back stretch to cut; use Reroute.');
   const lost = res.coverage.lostMeters;
   afterEdit(res, `Cut spur at ${km(u.along)}: ${sign(res.deltaMeters)}. ` + (lost >= 1 ? `Loses ${m0(lost)} of ${res.coverage.lost.map((l) => l.name).filter((v, i, a) => a.indexOf(v) === i).join(', ')}.` : 'Every street is still driven elsewhere.') + (res.seam && res.seam.banned ? ' Warning: the join is a banned turn.' : ''), true);
+}
+
+function doTrim(u, t) {
+  const r = doc.route, back = km(r.along[t]);
+  const res = E.trimSpur(doc, u, t);
+  if (!res) return toast('Cannot trim here: pick a point on the spur, not its apex.');
+  const lost = res.coverage.lostMeters;
+  afterEdit(res, `Trimmed spur at ${km(u.along)}: ${sign(res.deltaMeters)}, the car now turns back at ${back}. ` + (lost >= 1 ? `Loses ${m0(lost)} of ${[...new Set(res.coverage.lost.map((l) => l.name))].join(', ')}.` : 'Every street is still driven elsewhere.'), true);
 }
 
 function rerouteAround(u) {
@@ -522,7 +544,7 @@ function legalityText(l) {
 }
 
 function afterEdit(res, message, undoable = false) {
-  S.last = res; S.preview = null; resetPick();
+  S.last = res; S.preview = null; S.trim = null; resetPick();
   const prev = S.sel != null ? doc.uturns[S.sel] : null;      // the list is rebuilt: find the same U-turn by position
   S.sel = null; S.hover = null;
   if (prev) {
@@ -541,7 +563,7 @@ function resetPick() { S.pick = { a: null, b: null, cands: [], ci: 0 }; }
 
 function setMode(mode) {
   if (S.mode === mode) return;
-  S.mode = mode; S.hover = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.anchor = null;
+  S.mode = mode; S.hover = null; S.trim = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.anchor = null;
   const c = map.getContainer().classList;
   for (const m of ['select', 'cut', 'reroute', 'points']) c.toggle('mode-' + m, m === mode);
   map.getCanvas().style.cursor = '';
