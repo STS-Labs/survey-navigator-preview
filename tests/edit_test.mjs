@@ -214,6 +214,23 @@ section('T7 movePoint / deletePoints');
   check(!!raw && raw.legality.offStreet > 5, `unsnapped move is reported off the street (${raw && raw.legality.offStreet.toFixed(1)} m)`);
   check(Math.hypot(doc.route.X[j] - x, doc.route.Y[j] - y) > 9, 'unsnapped vertex stays where it was dropped');
   E.undo(doc);
+  // a 50 m move snaps onto a street within the 60 m radius and reports the vertex index
+  const [wla, wlo] = doc.proj.toLL(x - 50 * by / L, y + 50 * bx / L);
+  const wide = E.movePoint(doc, j, wla, wlo);
+  check(!!wide && typeof wide.index === 'number' && wide.index >= 0, 'move reports the vertex index');
+  check(!!net.snap(doc.route.X[wide.index], doc.route.Y[wide.index], 1.2, 4) || Math.hypot(doc.route.X[wide.index] - x, doc.route.Y[wide.index] - y) > 59, 'a 50 m move lands on a street when one is within 60 m');
+  check(wide.range.iA === wide.index - 1 && wide.range.iB === wide.index + 1, 'range brackets the moved vertex');
+  E.undo(doc);
+  // where two passes share a spot, moving one leaves the other where it was
+  let shared = -1, mate = -1;
+  for (let k = 1; k < n - 1 && shared < 0; k++) { const near = E.verticesNear(doc, r.X[k], r.Y[k], 0.5).map((v) => v.i).filter((v) => v !== k); if (near.length) { shared = k; mate = near[0]; } }
+  if (shared > 0) {
+    const [sla, slo2] = doc.proj.toLL(r.X[shared] + 6, r.Y[shared] + 6);
+    const mv2 = E.movePoint(doc, shared, sla, slo2, { snap: false });
+    const mateAfter = mate > shared ? mate + (doc.route.X.length - n) : mate;
+    check(!!mv2 && Math.abs(doc.route.X[mateAfter] - r.X[shared]) < 0.5 && Math.abs(doc.route.Y[mateAfter] - r.Y[shared]) < 0.5, 'the other pass through the spot stays put');
+    E.undo(doc);
+  } else console.log('  (no shared spot found)');
   check(doc.points === before.points || doc.points.every((p, k) => p[0] === before.points[k][0] && p[1] === before.points[k][1]), 'undo restores the route');
 }
 

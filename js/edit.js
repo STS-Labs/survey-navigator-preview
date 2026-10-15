@@ -363,17 +363,21 @@ export function reroute(doc, iA, iB, opts = {}) {
 
 /* ------------------------------------------------------------------ single points */
 
-// Move vertex i; by default it lands on the nearest street (node within 8 m, else street within 30 m)
+// Move vertex i; by default it lands on the nearest street (node within 8 m, else a street within
+// SNAP_RADIUS). The result says where the vertex is after the rebuild (`index`).
 export function movePoint(doc, i, lat, lon, { snap = true } = {}) {
   const { net, proj, route } = doc;
   if (i < 0 || i >= doc.points.length) return null;
   let [x, y] = proj.toXY(lat, lon);
-  if (snap) { const q = net.snap(x, y, 8, 30); if (q) { x = q.x; y = q.y; } }
+  if (snap) { const q = net.snap(x, y, 8, SNAP_RADIUS); if (q) { x = q.x; y = q.y; } }
   const [la, lo] = proj.toLL(x, y);
   const points = doc.points.slice();
   points[i] = [round6(la), round6(lo)];
-  const res = commit(doc, `move point at ${km(route.along[i])}`, points, { range: { iA: i, iB: i } });
-  res.legality = legality(doc.route, net, Math.max(0, i - 1), Math.min(doc.route.X.length - 1, i + 1));
+  const res = commit(doc, `move point at ${km(route.along[i])}`, points, {});
+  const near = verticesNear(doc, x, y, 1).map((v) => v.i).filter((v) => v >= i).sort((p, q) => p - q);
+  res.index = near.length ? near[0] : i;
+  res.range = { iA: Math.max(0, res.index - 1), iB: Math.min(doc.route.X.length - 1, res.index + 1) };
+  res.legality = legality(doc.route, net, res.range.iA, res.range.iB);
   return res;
 }
 
