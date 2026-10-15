@@ -44,6 +44,7 @@
 
     <section id="selCard" class="card" hidden></section>
     <section id="previewCard" class="card" hidden></section>
+    <section id="pointsCard" class="card" hidden></section>
 
     <section class="filters">
       <label><input type="checkbox" id="f-deadEnd" checked><i class="dot deadEnd"></i>dead end <b id="c-deadEnd">0</b></label>
@@ -73,7 +74,9 @@
         <dt>r</dt><dd>reroute around the selected U-turn</dd>
         <dt>← →</dt><dd>other pass of the same street for point B</dd>
         <dt>Enter / Esc</dt><dd>apply / cancel a preview</dd>
-        <dt>Alt + drag, Alt + Delete</dt><dd>move without snapping, delete with a plain fill</dd>
+        <dt>click on the line</dt><dd>add a point there (Alt: without snapping)</dd>
+        <dt>Delete / Alt+Delete</dt><dd>remove the selected points: gap closed along the street / legal detour</dd>
+        <dt>Alt + drag</dt><dd>move a point without snapping to a street</dd>
         <dt>⌘Z / ⇧⌘Z / ⌘S</dt><dd>undo / redo / save</dd>
         <dt>f · u · s · k</dt><dd>fit the route · toggle U-turn markers · satellite / map · parking bays</dd>
       </dl>

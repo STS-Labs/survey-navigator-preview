@@ -116,8 +116,9 @@ other pass of the day covers (coverage is counted per mapped street piece, eithe
 Four modes: **Select** (inspect; `n` / `p` step through), **Cut** (click a spur to remove the out-and-back
 stretch), **Reroute** (click A, then B further along: the stretch between is replaced by a legal path along
 real streets with no U-turn, previewed in green with what it loses in red, `←` `→` choose another pass
-of the same street for B), **Points** (drag a vertex, it snaps to the street; select a range and press
-Delete). The **Satellite** button (or `s`) puts Esri imagery under the street names, to see whether a spur
+of the same street for B), **Points** (click a point to select it, drag it to move it onto a street, click on the line to add a point;
+Delete removes the selection and closes the gap along the street, Alt+Delete fills it with a legal detour).
+In Cut mode the click lands where the car will turn back, so a spur can be shortened instead of dropped. The **Satellite** button (or `s`) puts Esri imagery under the street names, to see whether a spur
 is a street, a yard or a car park. **Parking** (or `k`) draws the city's parking bays from
 `data/parking.geojson` (pink: zone A, paid; teal: ALL) with the address and number of spaces of the bay
 under the cursor; rebuild that file from the Tbilisi-Parking-Study shapefile with

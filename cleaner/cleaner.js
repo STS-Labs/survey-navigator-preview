@@ -11,7 +11,7 @@ const HINT = {
   select: 'Click a U-turn marker or a list row. n / p step through them.',
   cut: 'Hover a spur: red is what goes, the white dot is where the car will turn back. Click to trim there; click near the base to drop the whole spur.',
   reroute: 'Click point A on the route, then point B further along: the stretch between is replaced by a legal, U-turn-free path.',
-  points: 'Drag a vertex (Alt: no snapping). Click / shift-click to select a range, Delete removes it (Alt: plain fill).',
+  points: 'Click a point to select it (shift-click: a range), drag it to move it, Delete removes it and closes the gap along the street (Alt+Delete: legal detour). Click on the line between points to add one.',
 };
 const $ = (id) => document.getElementById(id);
 const km = (m) => (m / 1000).toFixed(2) + ' km';
@@ -25,7 +25,7 @@ const S = {
   parking: (() => { try { return localStorage.getItem('cleaner.parking') || 'off'; } catch { return 'off'; } })(),
   parkingHover: null,
   pick: { a: null, b: null, cands: [], ci: 0 }, preview: null,
-  pts: { sel: new Set(), anchor: null, drag: null },
+  pts: { sel: new Set(), anchor: null, drag: null, hover: null },
   filters: { deadEnd: true, spur: true, midStreet: true },
 };
 
@@ -150,7 +150,7 @@ function addSatellite() {
 }
 
 // Only the street map's own layers: ours (imagery, parking, route) have their own switches
-const OWN_SOURCES = new Set(['sat', 'parking', 'route', 'spur', 'trim', 'trimdot', 'lost', 'preview', 'verts', 'uturns', 'picks', 'drag']);
+const OWN_SOURCES = new Set(['sat', 'parking', 'route', 'spur', 'trim', 'trimdot', 'lost', 'preview', 'verts', 'selline', 'uturns', 'picks', 'drag']);
 function rememberBaseVisibility() {
   baseVis = new Map();
   for (const l of map.getStyle().layers) if (!OWN_SOURCES.has(l.source)) baseVis.set(l.id, map.getLayoutProperty(l.id, 'visibility') || 'visible');
@@ -274,7 +274,7 @@ function addLayers() {
     g.beginPath(); g.moveTo(s * 0.32, s * 0.24); g.lineTo(s * 0.62, s * 0.5); g.lineTo(s * 0.32, s * 0.76); g.stroke();
   }, 32), { pixelRatio: 2 });
   addSatellite();
-  for (const id of ['route', 'spur', 'trim', 'trimdot', 'lost', 'preview', 'verts', 'uturns', 'picks', 'drag']) map.addSource(id, { type: 'geojson', data: EMPTY });
+  for (const id of ['route', 'spur', 'trim', 'trimdot', 'lost', 'preview', 'verts', 'selline', 'uturns', 'picks', 'drag']) map.addSource(id, { type: 'geojson', data: EMPTY });
   const layers = map.getStyle().layers;
   const firstLabel = (layers.find((l) => l.type === 'symbol' && l['source-layer'] === 'transportation_name')
     || layers.find((l) => l.type === 'symbol' && l['source-layer'] === 'place') || {}).id;
@@ -296,7 +296,9 @@ function addLayers() {
   line('lost', 'lost', '#f87171', zw(4, 12), { 'line-dasharray': [1.2, 1.2] }, undefined);
   line('preview-glow', 'preview', '#4ade80', zw(8, 24), { 'line-blur': zw(4, 12), 'line-opacity': 0.4 }, undefined);
   line('preview', 'preview', '#4ade80', zw(3.5, 10), { 'line-dasharray': [2, 1] }, undefined);
-  map.addLayer({ id: 'verts', type: 'circle', source: 'verts', minzoom: 15, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 15, 2.5, 18, 5], 'circle-color': ['case', ['>=', ['get', 'node'], 0], '#f2f3f7', '#9ba1b2'], 'circle-stroke-color': '#0d0f17', 'circle-stroke-width': 1 } });
+  map.addLayer({ id: 'selline', type: 'line', source: 'selline', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#8b7cf6', 'line-width': zw(7, 18), 'line-opacity': 0.7 } });
+  map.addLayer({ id: 'verts', type: 'circle', source: 'verts', minzoom: 14, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 14, 2.5, 18, 6], 'circle-color': ['case', ['>=', ['get', 'node'], 0], '#f2f3f7', '#9ba1b2'], 'circle-stroke-color': '#0d0f17', 'circle-stroke-width': 1 } });
+  map.addLayer({ id: 'verts-hover', type: 'circle', source: 'verts', filter: ['==', ['get', 'i'], -1], paint: { 'circle-radius': 10, 'circle-color': 'rgba(0,0,0,0)', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } });
   map.addLayer({ id: 'verts-sel', type: 'circle', source: 'verts', filter: ['==', ['get', 'sel'], 1], paint: { 'circle-radius': 7, 'circle-color': '#8b7cf6', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
   map.addLayer({ id: 'drag', type: 'circle', source: 'drag', paint: { 'circle-radius': 8, 'circle-color': '#fbbf24', 'circle-stroke-color': '#0d0f17', 'circle-stroke-width': 2 } });
   map.addLayer({ id: 'uturns', type: 'circle', source: 'uturns', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 11, 4, 16, 9], 'circle-color': ['get', 'color'], 'circle-stroke-color': '#0d0f17', 'circle-stroke-width': 1.5 } });
@@ -334,6 +336,8 @@ function renderMap() {
   if (S.pick.b != null) picks.push(pickFeature(S.pick.b, 'B'));
   setData('picks', fc(picks));
   setData('verts', S.mode === 'points' ? fc(Array.from(r.X, (_, i) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [r.lon[i], r.lat[i]] }, properties: { i, node: r.node[i], sel: S.pts.sel.has(i) ? 1 : 0 } }))) : EMPTY);
+  const sel = [...S.pts.sel].sort((p, q) => p - q);
+  setData('selline', fc([S.mode === 'points' && sel.length > 1 ? lineFeature(coordsOf(r, sel[0], sel[sel.length - 1])) : null]));
   if (!S.pts.drag) setData('drag', EMPTY);
 }
 const pointsCoords = (path) => Array.from(path.lat, (la, i) => [path.lon[i], la]);
@@ -421,10 +425,18 @@ function onClick(e) {
     }
   } else if (S.mode === 'points') {
     const i = pickVertex(x, y);
-    if (i < 0) { S.pts.sel.clear(); S.pts.anchor = null; }
-    else if (e.originalEvent.shiftKey && S.pts.anchor != null) { S.pts.sel.clear(); for (let k = Math.min(S.pts.anchor, i); k <= Math.max(S.pts.anchor, i); k++) S.pts.sel.add(k); }
-    else { S.pts.sel.clear(); S.pts.sel.add(i); S.pts.anchor = i; }
-    renderAll();
+    if (i >= 0) {
+      if (e.originalEvent.shiftKey && S.pts.anchor != null) { S.pts.sel.clear(); for (let k = Math.min(S.pts.anchor, i); k <= Math.max(S.pts.anchor, i); k++) S.pts.sel.add(k); }
+      else { S.pts.sel.clear(); S.pts.sel.add(i); S.pts.anchor = i; }
+      renderAll();
+      return;
+    }
+    const seg = E.nearestSegment(doc, x, y, tol());
+    if (!seg) { S.pts.sel.clear(); S.pts.anchor = null; renderAll(); return; }
+    const res = E.insertPoint(doc, seg.i, e.lngLat.lat, e.lngLat.lng, { snap: !e.originalEvent.altKey });
+    if (!res) return toast('Cannot add a point here.');
+    S.pts.sel.clear(); S.pts.sel.add(res.index); S.pts.anchor = res.index;
+    afterEdit(res, 'Point added. Drag it to pull the route through another street. ' + legalityText(res.legality), true);
   }
 }
 
@@ -437,6 +449,11 @@ function onMove(e) {
   if (!doc) return;
   if (S.pts.drag) {
     setData('drag', fc([{ type: 'Feature', geometry: { type: 'Point', coordinates: [e.lngLat.lng, e.lngLat.lat] } }]));
+    return;
+  }
+  if (S.mode === 'points') {
+    const [x, y] = toXY(e.lngLat), i = E.nearestVertex(doc, x, y, { tol: tol() });
+    if (i !== S.pts.hover) { S.pts.hover = i < 0 ? null : i; map.setFilter('verts-hover', ['==', ['get', 'i'], i]); map.getCanvas().style.cursor = i >= 0 ? 'grab' : (E.nearestSegment(doc, x, y, tol()) ? 'copy' : ''); }
     return;
   }
   if (S.mode !== 'cut' || moveQueued) return;
@@ -467,8 +484,11 @@ function onUp(e) {
   map.getContainer().classList.remove('dragging');
   const res = E.movePoint(doc, d.i, e.lngLat.lat, e.lngLat.lng, { snap: !(d.alt || e.originalEvent.altKey) });
   if (!res) return renderMap();
-  S.pts.sel.clear(); S.pts.sel.add(d.i); S.pts.anchor = d.i;
-  afterEdit(res, res.legality.offStreet > 1 ? `Point moved, ${m0(res.legality.offStreet)} off the street map.` : 'Point moved. ' + legalityText(res.legality));
+  S.pts.sel.clear(); S.pts.sel.add(res.index); S.pts.anchor = res.index;
+  const off = res.legality.offStreet;
+  afterEdit(res, off > 1
+    ? `Point moved, but ${m0(off)} of the route is off the street map: no street path within reach. Add points along the way, or move it closer to a street.`
+    : 'Point moved. ' + legalityText(res.legality), true);
 }
 
 /* ------------------------------------------------------------------ edits */
@@ -518,13 +538,13 @@ function applyPreview() {
   afterEdit(res, `Rerouted: ${sign(res.deltaMeters)}, ${res.uturnsBefore - res.uturnsAfter} U-turn(s) fewer. ` + coverageText(res.coverage) + ' ' + legalityText(res.legality), true);
 }
 
-function deleteSelection(alt) {
-  if (!S.pts.sel.size) return;
+function deleteSelection(legal) {
+  if (!S.pts.sel.size) return toast('Select a point first (click it; shift-click for a range).');
   const idx = [...S.pts.sel].sort((p, q) => p - q);
-  const res = E.deletePoints(doc, idx[0], idx[idx.length - 1], { legal: !alt });
+  const res = E.deletePoints(doc, idx[0], idx[idx.length - 1], { legal });
   if (!res) return toast('Those points cannot be deleted (the route must keep its start and end).');
   S.pts.sel.clear(); S.pts.anchor = null;
-  afterEdit(res, `Deleted ${idx.length} point(s): ${sign(res.deltaMeters)}. ` + coverageText(res.coverage) + ' ' + legalityText(res.legality), true);
+  afterEdit(res, `Deleted ${idx.length} point(s): ${sign(res.deltaMeters)}${legal ? ' (legal detour)' : ''}. ` + coverageText(res.coverage) + ' ' + legalityText(res.legality), true);
 }
 
 function coverageText(c) {
@@ -557,13 +577,13 @@ function afterEdit(res, message, undoable = false) {
   if (message) toast(message, undoable ? doUndo : null);
 }
 
-function doUndo() { if (E.undo(doc)) { S.last = null; S.trim = null; S.preview = null; resetPick(); S.pts.sel.clear(); hideToast(); renderAll(); } }
-function doRedo() { if (E.redo(doc)) { S.last = null; S.trim = null; S.preview = null; resetPick(); S.pts.sel.clear(); hideToast(); renderAll(); } }
+function doUndo() { if (E.undo(doc)) { S.last = null; S.trim = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.hover = null; if (mapReady) map.setFilter('verts-hover', ['==', ['get', 'i'], -1]); hideToast(); renderAll(); } }
+function doRedo() { if (E.redo(doc)) { S.last = null; S.trim = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.hover = null; if (mapReady) map.setFilter('verts-hover', ['==', ['get', 'i'], -1]); hideToast(); renderAll(); } }
 function resetPick() { S.pick = { a: null, b: null, cands: [], ci: 0 }; }
 
 function setMode(mode) {
   if (S.mode === mode) return;
-  S.mode = mode; S.hover = null; S.trim = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.anchor = null;
+  S.mode = mode; S.hover = null; S.trim = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.anchor = null; S.pts.hover = null; if (mapReady) map.setFilter('verts-hover', ['==', ['get', 'i'], -1]);
   const c = map.getContainer().classList;
   for (const m of ['select', 'cut', 'reroute', 'points']) c.toggle('mode-' + m, m === mode);
   map.getCanvas().style.cursor = '';
@@ -621,6 +641,7 @@ function bindPanel() {
   $('list').addEventListener('click', (e) => { const li = e.target.closest('li[data-k]'); if (li) select(+li.dataset.k); });
   $('selCard').addEventListener('click', onCardClick);
   $('previewCard').addEventListener('click', onCardClick);
+  $('pointsCard').addEventListener('click', onCardClick);
   window.addEventListener('keydown', onKey);
   window.addEventListener('beforeunload', (e) => { if (doc && doc.dirty) { e.preventDefault(); e.returnValue = ''; } });
 }
@@ -637,6 +658,9 @@ function onCardClick(e) {
     case 'cancel': S.preview = null; resetPick(); renderAll(); break;
     case 'prevB': cycleB(-1); break;
     case 'nextB': cycleB(1); break;
+    case 'delPts': deleteSelection(false); break;
+    case 'delPtsLegal': deleteSelection(true); break;
+    case 'flyPts': { const s = [...S.pts.sel]; if (s.length) flyToVertex(Math.min(...s)); break; }
   }
 }
 
@@ -687,7 +711,7 @@ function onKey(e) {
 
 function renderAll() {
   if (!doc) return;
-  renderStats(); renderList(); renderSelection(); renderPreview(); renderHistory(); renderMap();
+  renderStats(); renderList(); renderSelection(); renderPreview(); renderPointsCard(); renderHistory(); renderMap();
   $('modeHint').textContent = HINT[S.mode];
   for (const b of document.querySelectorAll('.mode')) b.classList.toggle('on', b.dataset.mode === S.mode);
   $('dirty').hidden = !doc.dirty;
@@ -763,6 +787,29 @@ function renderPreview() {
     <div class="actions">
       <button class="btn small primary" data-act="apply">Apply <kbd>Enter</kbd></button>
       <button class="btn small quiet" data-act="cancel">Cancel <kbd>Esc</kbd></button>
+    </div>`;
+}
+
+function renderPointsCard() {
+  const card = $('pointsCard');
+  card.hidden = S.mode !== 'points';
+  if (card.hidden) return;
+  const sel = [...S.pts.sel].sort((p, q) => p - q), r = doc.route, net = doc.net;
+  if (!sel.length) {
+    card.innerHTML = '<h2>Points</h2><div class="meta">No point selected. Click a point, or click on the line to add one.</div>';
+    return;
+  }
+  const a = sel[0], b = sel[sel.length - 1], h = r.half[Math.min(a, r.half.length - 1)];
+  const street = h >= 0 ? net.nameOf(net.way(h)) || '(no name)' : '(not on a street)';
+  const passes = E.verticesNear(doc, r.X[a], r.Y[a], 0.5).length;
+  card.innerHTML = `
+    <h2>${sel.length === 1 ? 'Point' : sel.length + ' points'} · ${km(r.along[a])}${sel.length > 1 ? ' → ' + km(r.along[b]) : ''}</h2>
+    <div class="meta"><b>${escapeHtml(street)}</b>${passes > 1 ? ` · ${passes} passes meet here (click again for the next)` : ''}<br>
+      ${sel.length > 1 ? `${m0(r.along[b] - r.along[a])} of route selected.` : 'Drag to move it.'}</div>
+    <div class="actions">
+      <button class="btn small primary" data-act="delPts">Delete <kbd>⌫</kbd></button>
+      <button class="btn small" data-act="delPtsLegal">Delete, legal detour</button>
+      <button class="btn small quiet" data-act="flyPts">Fly to</button>
     </div>`;
 }
 
