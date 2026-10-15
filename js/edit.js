@@ -387,8 +387,8 @@ export function insertPoint(doc, i, lat, lon, { snap = true } = {}) {
   const [la, lo] = proj.toLL(x, y);
   const points = doc.points.slice(0, i + 1).concat([[round6(la), round6(lo)]], doc.points.slice(i + 1));
   const res = commit(doc, `add point at ${km(route.along[i])}`, points, {});
-  const index = nearestVertex(doc, x, y, { after: i, tol: 1 });
-  res.index = index >= 0 ? index : i + 1;
+  const near = verticesNear(doc, x, y, 1).map((v) => v.i).filter((v) => v > i).sort((p, q) => p - q);
+  res.index = near.length ? near[0] : i + 1;
   res.range = { iA: i, iB: Math.min(doc.route.X.length - 1, res.index + 1) };
   res.legality = legality(doc.route, net, i, res.range.iB);
   return res;

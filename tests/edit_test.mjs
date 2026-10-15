@@ -291,11 +291,18 @@ section('T10 nearestSegment / insertPoint');
   const far = E.insertPoint(doc, s, fla, flo, { snap: false });
   check(!!far && far.legality.offStreet > 100, `an unsnapped point far from any street is reported off the map (${far && far.legality.offStreet.toFixed(0)} m)`);
   E.undo(doc);
-  // with snapping, the same cursor position lands on some street within 60 m (if any), never off the map by 150 m
-  const snapped = E.insertPoint(doc, s, fla, flo);
-  const onStreet = !!net.snap(doc.route.X[snapped.index], doc.route.Y[snapped.index], 1.2, 4);
-  check(!!snapped && (onStreet || snapped.legality.offStreet > 100), 'a snapped point lies on a street when one is within reach');
-  E.undo(doc);
+  // with snapping, a cursor 45 m beside the street lands on the street the engine's own snap finds
+  for (const off of [45, 70]) {
+    const ox = mx - off * by / L, oy = my + off * bx / L;
+    const oracle = net.snap(ox, oy, 8, E.SNAP_RADIUS);
+    const [ola, olo] = doc.proj.toLL(ox, oy);
+    const sn = E.insertPoint(doc, s, ola, olo);
+    check(!!sn && typeof sn.index === 'number', `${off} m: insert returns an index`);
+    if (oracle) check(Math.hypot(doc.route.X[sn.index] - oracle.x, doc.route.Y[sn.index] - oracle.y) < 0.5, `${off} m beside the street: the point lands where a ${E.SNAP_RADIUS} m snap puts it`);
+    else check(sn.legality.offStreet > off * 1.5, `${off} m beside the street with nothing within ${E.SNAP_RADIUS} m: the point stays off the map`);
+    if (off === 45) check(!!oracle, '45 m beside a street is within the snap radius (the street itself qualifies)');
+    E.undo(doc);
+  }
   // near two passes of the route the nearest piece wins and the other pass keeps its vertices
   let twice = -1;
   for (let k = 1; k < n - 1 && twice < 0; k++) { const near = E.verticesNear(doc, r.X[k], r.Y[k], 0.5); if (near.length > 1) twice = k; }
@@ -304,6 +311,7 @@ section('T10 nearestSegment / insertPoint');
     const seg2 = E.nearestSegment(doc, (r.X[twice] + r.X[twice + 1]) / 2, (r.Y[twice] + r.Y[twice + 1]) / 2, 15);
     const [la2, lo2] = doc.proj.toLL(seg2.x, seg2.y);
     const ins = E.insertPoint(doc, seg2.i, la2, lo2);
+    check(!!ins && ins.index === seg2.i + 1, `the new point's index is right after the piece it was added to (${ins && ins.index} vs ${seg2.i + 1})`);
     const otherAfter = other.map((v) => (v > seg2.i ? v + 1 : v));
     check(!!ins && otherAfter.every((v) => Math.abs(doc.route.X[v] - r.X[twice]) < 0.5 && Math.abs(doc.route.Y[v] - r.Y[twice]) < 0.5), 'inserting beside a shared spot touches only one pass');
     E.undo(doc);
