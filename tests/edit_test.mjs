@@ -264,5 +264,52 @@ for (const f of [heavy, ...[...docs.keys()].filter((p) => p !== heavy && p.endsW
   } else console.log(`  (no partial spur on ${name})`);
 }
 
+/* T10: a point can be added on a route piece and lands where the cursor was */
+section('T10 nearestSegment / insertPoint');
+{
+  const doc = docs.get(heavy), r = doc.route, net = doc.net, n = r.X.length;
+  let s = -1;
+  for (let k = 1; k < n - 2; k++) if (r.half[k] >= 0 && r.along[k + 1] - r.along[k] > 40 && r.node[k] >= 0 && r.node[k + 1] >= 0) { s = k; break; }
+  check(s > 0, 'found a street piece longer than 40 m between two street nodes');
+  const mx = (r.X[s] + r.X[s + 1]) / 2, my = (r.Y[s] + r.Y[s + 1]) / 2;
+  const bx = r.X[s + 1] - r.X[s], by = r.Y[s + 1] - r.Y[s], L = Math.hypot(bx, by);
+  const seg = E.nearestSegment(doc, mx - 2 * by / L, my + 2 * bx / L, 15);
+  check(!!seg && seg.i === s && Math.abs(seg.d - 2) < 0.1 && Math.abs(seg.t - 0.5) < 0.05, `nearestSegment finds the piece 2 m beside its middle (${seg && seg.i} vs ${s})`);
+  check(E.nearestSegment(doc, mx + 500, my + 500, 15) === null, 'nearestSegment returns null far from the route');
+  check(E.SNAP_RADIUS === 60, 'snap radius is 60 m');
+  const before = { n, total: r.total, points: doc.points };
+  const [la, lo] = doc.proj.toLL(seg.x, seg.y);
+  const res = E.insertPoint(doc, seg.i, la, lo);
+  check(!!res && doc.points.length === before.n + 1 && Math.abs(res.deltaMeters) < 0.5, `a point on the piece adds one vertex and no length (${doc.points.length} vs ${before.n + 1}, ${res && res.deltaMeters.toFixed(2)} m)`);
+  check(res.index === s + 1 && Math.hypot(doc.route.X[res.index] - seg.x, doc.route.Y[res.index] - seg.y) < 0.5, 'result reports where the new point landed');
+  check(res.range.iA === s && res.range.iB === res.index + 1 && res.legality.offStreet < 0.5, 'range and legality cover the new piece');
+  check(doc.dirty && doc.history.length === 1, 'insert is one undoable edit');
+  E.undo(doc);
+  check(doc.points.length === before.n, 'undo removes the point again');
+  // 150 m beside the street without snapping: the route jumps straight there and back, off the map
+  const [fla, flo] = doc.proj.toLL(mx - 150 * by / L, my + 150 * bx / L);
+  const far = E.insertPoint(doc, s, fla, flo, { snap: false });
+  check(!!far && far.legality.offStreet > 100, `an unsnapped point far from any street is reported off the map (${far && far.legality.offStreet.toFixed(0)} m)`);
+  E.undo(doc);
+  // with snapping, the same cursor position lands on some street within 60 m (if any), never off the map by 150 m
+  const snapped = E.insertPoint(doc, s, fla, flo);
+  const onStreet = !!net.snap(doc.route.X[snapped.index], doc.route.Y[snapped.index], 1.2, 4);
+  check(!!snapped && (onStreet || snapped.legality.offStreet > 100), 'a snapped point lies on a street when one is within reach');
+  E.undo(doc);
+  // near two passes of the route the nearest piece wins and the other pass keeps its vertices
+  let twice = -1;
+  for (let k = 1; k < n - 1 && twice < 0; k++) { const near = E.verticesNear(doc, r.X[k], r.Y[k], 0.5); if (near.length > 1) twice = k; }
+  if (twice > 0) {
+    const other = E.verticesNear(doc, r.X[twice], r.Y[twice], 0.5).map((v) => v.i).filter((v) => v !== twice);
+    const seg2 = E.nearestSegment(doc, (r.X[twice] + r.X[twice + 1]) / 2, (r.Y[twice] + r.Y[twice + 1]) / 2, 15);
+    const [la2, lo2] = doc.proj.toLL(seg2.x, seg2.y);
+    const ins = E.insertPoint(doc, seg2.i, la2, lo2);
+    const otherAfter = other.map((v) => (v > seg2.i ? v + 1 : v));
+    check(!!ins && otherAfter.every((v) => Math.abs(doc.route.X[v] - r.X[twice]) < 0.5 && Math.abs(doc.route.Y[v] - r.Y[twice]) < 0.5), 'inserting beside a shared spot touches only one pass');
+    E.undo(doc);
+  } else console.log('  (no shared spot found)');
+  check(E.insertPoint(doc, n - 1, la, lo) === null && E.insertPoint(doc, -1, la, lo) === null, 'cannot insert after the last vertex or before the first');
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);

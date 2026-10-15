@@ -76,6 +76,30 @@ export function nearestVertex(doc, x, y, { after = -1, nodeOnly = false, tol = 1
   return -1;
 }
 
+export const SNAP_RADIUS = 60;                                     // metres: how far a moved or added point may be from a street
+
+function projectOnSeg(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1, L2 = dx * dx + dy * dy || 1;
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / L2));
+  const x = x1 + t * dx, y = y1 + t * dy;
+  return { t, x, y, d: Math.hypot(px - x, py - y) };
+}
+
+// The route piece i -> i+1 under a map position (pieces with an end within `reach` metres are tried)
+export function nearestSegment(doc, x, y, tol = 15, reach = 200) {
+  const r = doc.route, seen = new Set();
+  let best = null;
+  for (const { i } of verticesNear(doc, x, y, reach)) {
+    for (const s of [i - 1, i]) {
+      if (s < 0 || s >= r.X.length - 1 || seen.has(s)) continue;
+      seen.add(s);
+      const q = projectOnSeg(x, y, r.X[s], r.Y[s], r.X[s + 1], r.Y[s + 1]);
+      if (q.d <= tol && (!best || q.d < best.d)) best = { i: s, t: q.t, x: q.x, y: q.y, d: q.d };
+    }
+  }
+  return best;
+}
+
 const pointsOf = (route) => Array.from(route.lat, (la, i) => [round6(la), round6(route.lon[i])]);
 const uturnsOf = (route) => route.maneuvers.filter((m) => m.kind === 'uturn');
 
@@ -350,6 +374,23 @@ export function movePoint(doc, i, lat, lon, { snap = true } = {}) {
   points[i] = [round6(la), round6(lo)];
   const res = commit(doc, `move point at ${km(route.along[i])}`, points, { range: { iA: i, iB: i } });
   res.legality = legality(doc.route, net, Math.max(0, i - 1), Math.min(doc.route.X.length - 1, i + 1));
+  return res;
+}
+
+// Add a vertex after vertex i, on the nearest street unless snap is off. The result says where it
+// landed (`index`): the engine may put street nodes between i and the new point.
+export function insertPoint(doc, i, lat, lon, { snap = true } = {}) {
+  const { net, proj, route } = doc, n = doc.points.length;
+  if (i < 0 || i >= n - 1) return null;
+  let [x, y] = proj.toXY(lat, lon);
+  if (snap) { const q = net.snap(x, y, 8, SNAP_RADIUS); if (q) { x = q.x; y = q.y; } }
+  const [la, lo] = proj.toLL(x, y);
+  const points = doc.points.slice(0, i + 1).concat([[round6(la), round6(lo)]], doc.points.slice(i + 1));
+  const res = commit(doc, `add point at ${km(route.along[i])}`, points, {});
+  const index = nearestVertex(doc, x, y, { after: i, tol: 1 });
+  res.index = index >= 0 ? index : i + 1;
+  res.range = { iA: i, iB: Math.min(doc.route.X.length - 1, res.index + 1) };
+  res.legality = legality(doc.route, net, i, res.range.iB);
   return res;
 }
 
