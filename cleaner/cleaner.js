@@ -70,7 +70,7 @@ async function loadFile(file) {
   } catch (e) { showLoading(null); toast('Could not open ' + file + ': ' + e.message); return; }
   showLoading(null);
   location.hash = file;
-  S.sel = null; S.hover = null; S.last = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.anchor = null;
+  S.sel = null; S.hover = null; S.trim = null; S.last = null; S.preview = null; resetPick(); S.pts.sel.clear(); S.pts.anchor = null;
   $('target').textContent = 'data/routes/' + E.cleanName(file);
   for (const id of ['btnSave', 'btnDownload', 'btnRevert']) $(id).disabled = false;
   renderAll();
@@ -474,7 +474,7 @@ function onUp(e) {
 /* ------------------------------------------------------------------ edits */
 
 function select(k, fly = true) {
-  S.sel = k; S.hover = null;
+  S.sel = k; S.hover = null; S.trim = null;
   renderAll();
   if (fly && k != null) flyToVertex(doc.uturns[k].i);
   const row = document.querySelector(`#list li[data-k="${k}"]`);
@@ -557,8 +557,8 @@ function afterEdit(res, message, undoable = false) {
   if (message) toast(message, undoable ? doUndo : null);
 }
 
-function doUndo() { if (E.undo(doc)) { S.last = null; S.preview = null; resetPick(); S.pts.sel.clear(); hideToast(); renderAll(); } }
-function doRedo() { if (E.redo(doc)) { S.last = null; S.preview = null; resetPick(); S.pts.sel.clear(); hideToast(); renderAll(); } }
+function doUndo() { if (E.undo(doc)) { S.last = null; S.trim = null; S.preview = null; resetPick(); S.pts.sel.clear(); hideToast(); renderAll(); } }
+function doRedo() { if (E.redo(doc)) { S.last = null; S.trim = null; S.preview = null; resetPick(); S.pts.sel.clear(); hideToast(); renderAll(); } }
 function resetPick() { S.pick = { a: null, b: null, cands: [], ci: 0 }; }
 
 function setMode(mode) {
