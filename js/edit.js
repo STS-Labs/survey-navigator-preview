@@ -212,6 +212,31 @@ export function cutSpur(doc, u) {
   return commit(doc, `cut spur at ${km(u.along)}${u.name ? ' (' + u.name + ')' : ''}`, newPoints, { seam, range: { iA: u.a, iB: u.a } });
 }
 
+// The vertex between lo and hi nearest to vertex i: the same spot on the other leg of a spur
+export function mirrorVertex(route, i, lo, hi) {
+  let best = -1, bd = Infinity;
+  for (let k = lo; k <= hi; k++) {
+    const d = Math.hypot(route.X[k] - route.X[i], route.Y[k] - route.Y[i]);
+    if (d < bd) { bd = d; best = k; }
+  }
+  return best;
+}
+
+// Shorten the out-and-back of U-turn u: the car turns back at vertex i instead of at the apex.
+// i may be on the way out (a <= i < apex) or on the way back (apex < i <= b); both give the same route.
+export function trimSpur(doc, u, i) {
+  if (!u || !(u.K > 0) || u.b <= u.a) return null;
+  if (i < u.a || i > u.b || i === u.i) return null;
+  const { route } = doc;
+  let t, m;
+  if (i < u.i) { t = i; m = mirrorVertex(route, i, u.i + 1, u.b); }
+  else { m = i; t = mirrorVertex(route, i, u.a, u.i - 1); }
+  if (t <= u.a) return cutSpur(doc, u);
+  if (m <= t) return null;
+  const newPoints = doc.points.slice(0, t + 1).concat(doc.points.slice(m));
+  return commit(doc, `trim spur at ${km(u.along)} back to ${km(route.along[t])}${u.name ? ' (' + u.name + ')' : ''}`, newPoints, { range: { iA: t, iB: t } });
+}
+
 /* ------------------------------------------------------------------ legality */
 
 // Same checks as tests/plan_check.mjs, for vertices i0..i1 of a route

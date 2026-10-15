@@ -211,5 +211,46 @@ section('T7 movePoint / deletePoints');
   check(doc.points === before.points || doc.points.every((p, k) => p[0] === before.points[k][0] && p[1] === before.points[k][1]), 'undo restores the route');
 }
 
+/* T9: trimming a spur keeps the way out to a chosen point and turns back there */
+section('T9 trimSpur');
+{
+  const doc = docs.get(heavy), r = doc.route, n = r.X.length;
+  const u = doc.uturns.find((v) => v.type === 'deadEnd' && !v.partial && v.i - v.a >= 3);
+  check(!!u, 'a full dead-end spur with at least three vertices on the way out');
+  const t = u.a + Math.floor((u.i - u.a) / 2);
+  const m = E.mirrorVertex(r, t, u.i + 1, u.b);
+  check(m > u.i && m <= u.b && dist(r, t, m) < 1, `mirror of vertex ${t} is the same spot on the way back (${m})`);
+  check(E.mirrorVertex(r, t, 5, 4) === -1, 'empty range has no mirror');
+  const before = { n, total: r.total, uturns: doc.uturns.length, points: doc.points };
+  const res = E.trimSpur(doc, u, t);
+  check(!!res && doc.points.length === before.n - (m - t), `the stretch beyond the trim point is gone (${doc.points.length} vs ${before.n - (m - t)})`);
+  check(Math.abs(res.deltaMeters + (r.along[m] - r.along[t])) < 1, `length drops by the trimmed out-and-back (${res.deltaMeters.toFixed(1)} m)`);
+  check(doc.uturns.length <= before.uturns && doc.uturns.some((v) => v.i === t), 'the U-turn now sits at the trim point');
+  check(doc.points.slice(0, t + 1).every((p, k) => p[0] === before.points[k][0] && p[1] === before.points[k][1]), 'route up to the trim point is untouched');
+  check(res.label.includes('trim') && res.range.iA === t, 'result is labelled and reports the trim point');
+  E.undo(doc);
+  const res2 = E.trimSpur(doc, u, m);
+  check(!!res2 && Math.abs(res2.deltaMeters - res.deltaMeters) < 0.01 && doc.points.length === before.n - (m - t), 'trimming from the way back gives the same result');
+  E.undo(doc);
+  const cut = E.cutSpur(doc, u), cutDelta = cut.deltaMeters;
+  E.undo(doc);
+  const res3 = E.trimSpur(doc, u, u.a);
+  check(!!res3 && Math.abs(res3.deltaMeters - cutDelta) < 0.01, 'trimming at the base equals cutting the spur');
+  E.undo(doc);
+  check(E.trimSpur(doc, u, u.i) === null, 'no trim at the apex');
+  check(E.trimSpur(doc, { ...u, K: 0 }, t) === null, 'no trim without a spur');
+  check(E.trimSpur(doc, u, u.b + 5) === null, 'no trim outside the spur');
+  check(doc.points.length === before.n && !doc.dirty, 'nothing left behind');
+
+  // a partial spur (the way back ends mid-block): the mirror is a little off but the trim still works
+  const pu = doc.uturns.find((v) => v.type !== 'midStreet' && v.partial && v.i - v.a >= 3);
+  if (pu) {
+    const pt = pu.a + Math.floor((pu.i - pu.a) / 2);
+    const pres = E.trimSpur(doc, pu, pt);
+    check(!!pres && doc.route.X.length === doc.points.length && doc.uturns.some((v) => Math.abs(v.i - pt) <= 1), 'partial spur trims to a valid route with the U-turn at the trim point');
+    E.undo(doc);
+  } else console.log('  (no partial spur on this file)');
+}
+
 console.log(`\n${passes} passed, ${failures} failed`);
 process.exit(failures ? 1 : 0);
