@@ -186,7 +186,7 @@ section('T7 movePoint / deletePoints');
   }
   check(i > 0, 'found three mid-block vertices');
   const before = { n, total: r.total, points: doc.points };
-  const del = E.deletePoints(doc, i, i + 2, { legal: false });
+  const del = E.deletePoints(doc, i, i + 2);                       // default: just close the gap along the street
   check(!!del && Math.abs(del.deltaMeters) < 1, `plain delete refills along the same street (${del && del.deltaMeters.toFixed(2)} m)`);
   check(doc.points.length === before.n, 'the engine puts the street nodes back');
   check(del.legality.offStreet < 0.5, 'fill is on streets');
@@ -195,6 +195,12 @@ section('T7 movePoint / deletePoints');
   check(!!legal && Math.abs(legal.deltaMeters) < 1 && doc.points.length === before.n, 'legal delete gives the same result on a straight block');
   E.undo(doc);
   check(E.deletePoints(doc, 0, n - 2) === null, 'cannot delete the whole route');
+  const edge = E.deletePoints(doc, 1, 1);
+  check(!!edge && doc.points.length <= n && doc.points[0][0] === before.points[0][0] && doc.points[0][1] === before.points[0][1], 'the vertex after the start can be deleted; the start stays');
+  E.undo(doc);
+  const tail = E.deletePoints(doc, n - 2, n - 2);
+  check(!!tail && doc.points[doc.points.length - 1][0] === before.points[n - 1][0] && doc.points[doc.points.length - 1][1] === before.points[n - 1][1], 'the vertex before the end can be deleted; the end stays');
+  E.undo(doc);
 
   // move a vertex 10 m sideways
   const j = i + 1, [la, lo] = doc.points[j];

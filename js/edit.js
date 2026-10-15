@@ -333,12 +333,14 @@ export function movePoint(doc, i, lat, lon, { snap = true } = {}) {
   return res;
 }
 
-// Delete vertices i0..i1 (never the first or last). The gap is filled along the streets:
-// legally (no wrong-way, no banned turn, no U-turn) or, with legal=false, by the shortest path.
-export function deletePoints(doc, i0, i1, { legal = true } = {}) {
+// Delete vertices i0..i1 (never the first or last). The neighbours are joined by the shortest path
+// along the streets (on one street: that street; at the end of a spur: a turn-back there).
+// With legal=true the gap is filled by a legal detour instead (no wrong-way, no banned turn, no U-turn).
+export function deletePoints(doc, i0, i1, { legal = false } = {}) {
   const n = doc.points.length, { net, route } = doc;
   const a = Math.max(1, Math.min(i0, i1)), b = Math.min(n - 2, Math.max(i0, i1));
   if (b < a) return null;
+  if (a - 1 === 0 && b + 1 === n - 1) return null;                    // nothing but the two ends would be left
   if (legal) {
     const res = reroute(doc, a - 1, b + 1);
     if (res) res.label = `delete points ${a}–${b} (${km(route.along[a])})`;
