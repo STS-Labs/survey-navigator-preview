@@ -6,7 +6,7 @@ import { arrowSvg, UI, CAR_SVG } from './icons.js';
 import { SURVEY_DAYS, loadSurveyDay } from './days.js';
 import { VOICE_DIR, VOICE_CLIPS, clipsFor, gapAfter } from './voice.js';
 
-const APP_VERSION = '1.5.6 (15 Oct 2026)';
+const APP_VERSION = '1.5.7 (17 Oct 2026)';
 const NET_URL = 'data/tbilisi-net.json';
 const STYLE = 'https://tiles.openfreemap.org/styles/liberty';      // recoloured to the night design on load
 const TILEJSON = 'https://tiles.openfreemap.org/planet';

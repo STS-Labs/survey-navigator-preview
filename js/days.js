@@ -1,11 +1,8 @@
-// The supplied survey days and named test drive are bundled unchanged.
-export const SURVEY_DAYS = [
-  ...Array.from({ length: 6 }, (_, i) => ({
-    number: i + 1,
-    file: `data/routes/day_${String(i + 1).padStart(2, '0')}_nav.gpx`,
-  })),
-  { number: 7, name: 'Zuka - TestDrive', file: 'data/routes/zuka-testdrive.gpx' },
-];
+// The survey days of plan v3 (Tbilisi-Parking-Study, GPX_Google), bundled unchanged.
+export const SURVEY_DAYS = Array.from({ length: 11 }, (_, i) => ({
+  number: i + 1,
+  file: `data/routes/v3_day_${String(i + 1).padStart(2, '0')}.gpx`,
+}));
 
 export async function loadSurveyDay(number) {
   const entry = SURVEY_DAYS.find((day) => day.number === number);
