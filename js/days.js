@@ -1,8 +1,8 @@
-// The survey days of plan v3 (Tbilisi-Parking-Study, GPX_Google), bundled unchanged.
-export const SURVEY_DAYS = Array.from({ length: 11 }, (_, i) => ({
-  number: i + 1,
-  file: `data/routes/v3_day_${String(i + 1).padStart(2, '0')}.gpx`,
-}));
+// The survey days that have been reviewed and cleaned (Tbilisi-Parking-Study, Parking_Routing/plan_clean),
+// bundled unchanged; days are added here one by one as they are cleaned.
+export const SURVEY_DAYS = [
+  { number: 1, file: 'data/routes/clean_day_01.gpx' },
+];
 
 export async function loadSurveyDay(number) {
   const entry = SURVEY_DAYS.find((day) => day.number === number);

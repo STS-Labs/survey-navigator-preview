@@ -26,7 +26,7 @@ also plays with the ring / silent switch on silent.
 recordings, the default) and **English** (the iPhone's own English voice, "In 300 meters, turn right").
 A tap plays a sample in the chosen voice; the choice is kept on the phone.
 
-The eleven survey days of plan v3 (made by `GPX_Google` in Tbilisi-Parking-Study) are bundled unchanged in `data/routes/`. They are cached with the app
+The survey days that have been reviewed and cleaned (`Parking_Routing/plan_clean` in Tbilisi-Parking-Study) are bundled unchanged in `data/routes/`; more are added as they are cleaned. They are cached with the app
 after a successful online service-worker installation, so the day picker also works offline once
 that download is complete. Each GPX keeps its own saved progress; choosing another day does not clear it.
 

@@ -1,6 +1,6 @@
 // Offline support: the app and the street network are kept on the phone, and so is every map tile it
 // has shown (plus the tiles around the loaded route), so a dead spot in the city does not stop navigation.
-const APP = 'sn-app-15';
+const APP = 'sn-app-16';
 const MAP = 'sn-map-1';
 // The recorded voice, kept for offline use (the same list as js/voice.js)
 const VOICE = [
@@ -16,17 +16,7 @@ const SHELL = [
   './', 'index.html', 'css/app.css', 'js/app.js', 'js/core.js', 'js/sim.js', 'js/i18n.js', 'js/icons.js',
   'vendor/maplibre-gl-4.7.1/maplibre-gl.js', 'vendor/maplibre-gl-4.7.1/maplibre-gl.css',
   'js/days.js',
-  'data/routes/v3_day_01.gpx',
-  'data/routes/v3_day_02.gpx',
-  'data/routes/v3_day_03.gpx',
-  'data/routes/v3_day_04.gpx',
-  'data/routes/v3_day_05.gpx',
-  'data/routes/v3_day_06.gpx',
-  'data/routes/v3_day_07.gpx',
-  'data/routes/v3_day_08.gpx',
-  'data/routes/v3_day_09.gpx',
-  'data/routes/v3_day_10.gpx',
-  'data/routes/v3_day_11.gpx',
+  'data/routes/clean_day_01.gpx',
   'data/tbilisi-net.json', 'manifest.webmanifest', 'icons/logo.png', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
   'fonts/inter-latin.woff2', 'fonts/noto-sans-georgian.woff2', 'js/voice.js',
   ...VOICE.map((n) => `audio/ka/${n}.m4a`),
