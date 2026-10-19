@@ -2,6 +2,7 @@
 // bundled unchanged; days are added here one by one as they are cleaned.
 export const SURVEY_DAYS = [
   { number: 1, file: 'data/routes/clean_day_01.gpx' },
+  { number: 2, file: 'data/routes/clean_day_02.gpx' },
 ];
 
 export async function loadSurveyDay(number) {
