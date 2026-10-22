@@ -4,6 +4,13 @@ export const SURVEY_DAYS = [
   { number: 1, file: 'data/routes/clean_day_01.gpx' },
   { number: 2, file: 'data/routes/clean_day_02.gpx' },
   { number: 3, file: 'data/routes/clean_day_03.gpx' },
+  { number: 4, file: 'data/routes/clean_day_04.gpx' },
+  { number: 5, file: 'data/routes/clean_day_05.gpx' },
+  { number: 6, file: 'data/routes/clean_day_06.gpx' },
+  { number: 7, file: 'data/routes/clean_day_07.gpx' },
+  { number: 8, file: 'data/routes/clean_day_08.gpx' },
+  { number: 9, file: 'data/routes/clean_day_09.gpx' },
+  { number: 10, file: 'data/routes/clean_day_10.gpx' },
 ];
 
 export async function loadSurveyDay(number) {
