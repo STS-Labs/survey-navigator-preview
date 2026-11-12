@@ -11,6 +11,10 @@ export const SURVEY_DAYS = [
   { number: 8, file: 'data/routes/clean_day_08.gpx' },
   { number: 9, file: 'data/routes/clean_day_09.gpx' },
   { number: 10, file: 'data/routes/clean_day_10.gpx' },
+  // the extra days (12 Nov 2026): the 734 City Hall lots still to film, from the STS office
+  { number: 11, file: 'data/routes/clean_day_11.gpx' },
+  { number: 12, file: 'data/routes/clean_day_12.gpx' },
+  { number: 13, file: 'data/routes/clean_day_13.gpx' },
 ];
 
 export async function loadSurveyDay(number) {
