@@ -15,6 +15,9 @@ export const SURVEY_DAYS = [
   { number: 11, file: 'data/routes/clean_day_11.gpx' },
   { number: 12, file: 'data/routes/clean_day_12.gpx' },
   { number: 13, file: 'data/routes/clean_day_13.gpx' },
+  // day 13 again from Guram Abramishvili St, where Zuka stays (14 Nov): the same streets, 21 km less driving
+  // (number: an id only - the tile shows the name)
+  { number: 131, name: 'დღე 13z', file: 'data/routes/clean_day_13z.gpx' },
 ];
 
 export async function loadSurveyDay(number) {
