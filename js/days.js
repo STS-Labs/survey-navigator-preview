@@ -20,6 +20,9 @@ export const SURVEY_DAYS = [
   { number: 131, name: 'დღე 13z', file: 'data/routes/clean_day_13z.gpx' },
   // day 14 (19 Nov 2026): the lots still to film after days 12 and 13 were stopped before their ends
   { number: 14, file: 'data/routes/clean_day_14.gpx' },
+  // day 15 (22 Nov 2026): the lots the cameras had not captured yet after day 14 (checked against the
+  // camera positions), less 5 lots Zuka took out of the route
+  { number: 15, file: 'data/routes/clean_day_15.gpx' },
 ];
 
 export async function loadSurveyDay(number) {
