@@ -1,6 +1,6 @@
 // Offline support: the app and the street network are kept on the phone, and so is every map tile it
 // has shown (plus the tiles around the loaded route), so a dead spot in the city does not stop navigation.
-const APP = 'sn-app-24';
+const APP = 'sn-app-25';
 const MAP = 'sn-map-1';
 // The recorded voice, kept for offline use (the same list as js/voice.js)
 const VOICE = [

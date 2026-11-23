@@ -21,7 +21,7 @@ export const SURVEY_DAYS = [
   // day 14 (19 Nov 2026): the lots still to film after days 12 and 13 were stopped before their ends
   { number: 14, file: 'data/routes/clean_day_14.gpx' },
   // day 15 (22 Nov 2026): the lots the cameras had not captured yet after day 14 (checked against the
-  // camera positions), less 5 lots Zuka took out of the route
+  // camera positions), less the lots Zuka took out of the route; replaced on 23 Nov without P-468 and CH-2378
   { number: 15, file: 'data/routes/clean_day_15.gpx' },
 ];
 
