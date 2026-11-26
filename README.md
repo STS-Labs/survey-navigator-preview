@@ -50,7 +50,8 @@ waiting for GPS or paused.
 
 On the map: **blue to violet** = the next 320 m, dimmer violet = the road after that, white arrow = the next
 turn, **orange** = the way back after a missed turn (**blue** on the way to the start or to where the drive
-stopped), **red dashes** = stretches missed so far. The map can be moved and zoomed with the fingers at any
+stopped), **red dashes** = stretches missed so far. **Yellow blocks** = the parking lots of the survey (**cyan** where the lot has EV chargers), all
+3,259 of them, always shown, drawn where they really are so the driver sees on which side of the street each lot is. The map can be moved and zoomed with the fingers at any
 time; the violet re-centre button (bottom right, shown only while the map is moved away) brings it back to
 the car, and it also comes back by itself after 20 seconds.
 
@@ -74,6 +75,16 @@ Street data: `data/tbilisi-net.json`, all drivable OpenStreetMap streets of Tbil
 flags and turn restrictions (3.9 MB, 1.3 MB compressed). Map tiles: OpenFreeMap. Both are kept on the
 phone by `sw.js`, so a dead spot does not stop navigation. Outside Tbilisi the app still works, with
 arrows from the line's shape only.
+
+## Rebuilding the parking lots
+
+```bash
+unzip parking-lots-navigator-app.kmz doc.kml -d /tmp/lots
+python3 -I tools/build_lots.py /tmp/lots/doc.kml data/parking-lots.json
+```
+
+The KML is Zuka's `Export_Output_Dissolve` (26 Nov 2026): lot polygons by EL_DAMTENI (EV chargers), the
+dissolve's sliver LineStrings dropped. The output keeps every corner to 0.1 m (136 KB, 52 KB compressed).
 
 ## Rebuilding the street data
 

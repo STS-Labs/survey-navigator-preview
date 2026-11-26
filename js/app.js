@@ -5,8 +5,9 @@ import { STR, speech } from './i18n.js';
 import { arrowSvg, UI, CAR_SVG } from './icons.js';
 import { SURVEY_DAYS, loadSurveyDay } from './days.js';
 import { VOICE_DIR, VOICE_CLIPS, clipsFor, gapAfter } from './voice.js';
+import { loadLots } from './lots.js';
 
-const APP_VERSION = '1.10.1 (23 Nov 2026)';
+const APP_VERSION = '1.11.0 (27 Nov 2026)';
 const NET_URL = 'data/tbilisi-net.json';
 const STYLE = 'https://tiles.openfreemap.org/styles/liberty';      // recoloured to the night design on load
 const TILEJSON = 'https://tiles.openfreemap.org/planet';
@@ -38,7 +39,7 @@ const T = STR.ka;
 let netPromise = null;
 let day = null;                 // { text, hash, name, proj, net, route }
 let nav = null;
-let map = null, mapLoaded = null, mapReady = false, carMarker = null;
+let map = null, mapLoaded = null, mapReady = false, carMarker = null, lots = null;
 let screen = 'home', follow = true, followTimer = null;
 let watchId = null, wakeLock = null, gpsBlocked = false;
 let sim = null, simTimer = null, simMult = 4, simClock = 0, simFed = -1, simBackup = null;
@@ -250,6 +251,7 @@ $('file').addEventListener('change', async (ev) => {
 
 function ensureMap() {
   if (map) return mapLoaded;
+  lots = lots || loadLots().catch((e) => { console.warn('parking lots:', e); lots = null; return null; });
   const r = day.route, [lat, lon] = day.proj.toLL(r.X[0], r.Y[0]);
   map = new maplibregl.Map({
     container: 'map', style: STYLE, center: [lon, lat], zoom: 16,
@@ -387,9 +389,25 @@ function addRouteLayers() {
     paint: { 'icon-opacity': 0.45 },
   }, firstLabel);
   chev('near-chev', 'near'); chev('far-chev', 'far'); chev('back-chev', 'back');
+  addLotLayers(firstLabel);
   line('man-case', 'man', '#0d0f17', zw(8, 22), { top: true });
   line('man', 'man', '#f2f3f7', zw(4, 13), { top: true });
   map.addLayer({ id: 'manhead', type: 'symbol', source: 'manhead', layout: { 'icon-image': 'head', 'icon-rotate': ['get', 'b'], 'icon-rotation-alignment': 'map', 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-size': ['interpolate', ['linear'], ['zoom'], 14, 0.45, 18, 1] } });
+}
+
+// The parking lots of the survey, always on: yellow blocks with a dark edge (cyan where the lot has EV
+// chargers), over the route lines so a lot at the kerb is never hidden, under the turn arrow and street
+// names. Loaded once; nothing changes while driving.
+const LOT = { plain: '#facc15', ev: '#22d3ee', edge: '#0d0f17' };
+function addLotLayers(before) {
+  map.addSource('lots', { type: 'geojson', data: { type: 'FeatureCollection', features: [] }, maxzoom: 16, tolerance: 0.2, buffer: 64 });
+  const color = ['match', ['get', 'ev'], 0, LOT.plain, LOT.ev];
+  const zl = (a, b) => ['interpolate', ['linear'], ['zoom'], 13, a, 17, b];
+  map.addLayer({ id: 'lots-case', type: 'line', source: 'lots', layout: { 'line-join': 'round' }, paint: { 'line-color': LOT.edge, 'line-width': zl(2.5, 4.5) } }, before);
+  map.addLayer({ id: 'lots-fill', type: 'fill', source: 'lots', paint: { 'fill-color': color, 'fill-opacity': 0.92 } }, before);
+  // the lot's own outline keeps a narrow lot at least a couple of pixels wide when the map is tilted
+  map.addLayer({ id: 'lots-edge', type: 'line', source: 'lots', layout: { 'line-join': 'round' }, paint: { 'line-color': color, 'line-width': zl(1, 1.5) } }, before);
+  if (lots) lots.then((data) => { if (data && map.getSource('lots')) map.getSource('lots').setData(data); });
 }
 
 // The way back: orange after leaving the route, blue on the way to the start or to where the drive stopped

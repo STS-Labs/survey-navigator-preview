@@ -1,6 +1,6 @@
 // Offline support: the app and the street network are kept on the phone, and so is every map tile it
 // has shown (plus the tiles around the loaded route), so a dead spot in the city does not stop navigation.
-const APP = 'sn-app-25';
+const APP = 'sn-app-26';
 const MAP = 'sn-map-1';
 // The recorded voice, kept for offline use (the same list as js/voice.js)
 const VOICE = [
@@ -32,7 +32,7 @@ const SHELL = [
   'data/routes/clean_day_13z.gpx',
   'data/routes/clean_day_14.gpx',
   'data/routes/clean_day_15.gpx',
-  'data/tbilisi-net.json', 'manifest.webmanifest', 'icons/logo.png', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
+  'data/tbilisi-net.json', 'js/lots.js', 'data/parking-lots.json', 'manifest.webmanifest', 'icons/logo.png', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png',
   'fonts/inter-latin.woff2', 'fonts/noto-sans-georgian.woff2', 'js/voice.js',
   ...VOICE.map((n) => `audio/ka/${n}.m4a`),
 ];
