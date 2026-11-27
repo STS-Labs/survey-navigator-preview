@@ -23,6 +23,9 @@ export const SURVEY_DAYS = [
   // day 15 (22 Nov 2026): the lots the cameras had not captured yet after day 14 (checked against the
   // camera positions), less the lots Zuka took out of the route; replaced on 23 Nov without P-468 and CH-2378
   { number: 15, file: 'data/routes/clean_day_15.gpx' },
+  // day 16 (27 Nov 2026), the final route: the street kerbs on Zuka's 27 Nov map whose signs the cameras
+  // have not caught, each driven with the kerb on the right (both sides where no kerb was filmed)
+  { number: 16, file: 'data/routes/clean_day_16.gpx' },
 ];
 
 export async function loadSurveyDay(number) {

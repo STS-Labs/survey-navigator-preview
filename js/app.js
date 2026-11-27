@@ -7,7 +7,7 @@ import { SURVEY_DAYS, loadSurveyDay } from './days.js';
 import { VOICE_DIR, VOICE_CLIPS, clipsFor, gapAfter } from './voice.js';
 import { loadLots } from './lots.js';
 
-const APP_VERSION = '1.11.0 (27 Nov 2026)';
+const APP_VERSION = '1.12.0 (27 Nov 2026)';
 const NET_URL = 'data/tbilisi-net.json';
 const STYLE = 'https://tiles.openfreemap.org/styles/liberty';      // recoloured to the night design on load
 const TILEJSON = 'https://tiles.openfreemap.org/planet';
