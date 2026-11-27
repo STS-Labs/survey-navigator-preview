@@ -26,6 +26,9 @@ export const SURVEY_DAYS = [
   // day 16 (27 Nov 2026), the final route: the street kerbs on Zuka's 27 Nov map whose signs the cameras
   // have not caught, each driven with the kerb on the right (both sides where no kerb was filmed)
   { number: 16, file: 'data/routes/clean_day_16.gpx' },
+  // day 16 without Beri Gabriel Salosi Ave, "16 (no gs)" (27 Nov 2026): Zuka has both for the morning
+  // (number: an id only - the tile shows the name)
+  { number: 161, name: 'დღე 16 (no gs)', file: 'data/routes/clean_day_16ngs.gpx' },
 ];
 
 export async function loadSurveyDay(number) {
